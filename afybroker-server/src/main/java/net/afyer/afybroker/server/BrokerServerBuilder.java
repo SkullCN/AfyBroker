@@ -43,7 +43,7 @@ public class BrokerServerBuilder {
     /**
      * bolt 连接器
      */
-    private final List<ConnectionEventTypeProcessor> connectionEventTypeProcessorList = new ArrayList<>();
+    private final Map<ConnectionEventType, List<ConnectionEventProcessor>> connectionEventProcessorMap = new HashMap<>();
 
     /**
      * 指标收集器
@@ -96,8 +96,12 @@ public class BrokerServerBuilder {
         brokerServer.initServer();
 
         processorList.forEach(brokerServer::registerUserProcessor);
-        connectionEventTypeProcessorList.forEach(processor -> brokerServer.aware(processor.getDelegate()));
-        connectionEventTypeProcessorList.forEach(processor -> brokerServer.addConnectionEventProcessor(processor.getType(), processor));
+        for (ConnectionEventType eventType : connectionEventProcessorMap.keySet()) {
+            List<ConnectionEventProcessor> processors = connectionEventProcessorMap.get(eventType);
+            for (ConnectionEventProcessor processor : processors) {
+                brokerServer.addConnectionEventProcessor(eventType, processor);
+            }
+        }
 
         return brokerServer;
     }
@@ -124,7 +128,13 @@ public class BrokerServerBuilder {
     public BrokerServerBuilder addConnectionEventProcessor(ConnectionEventType type, ConnectionEventProcessor processor) {
         Objects.requireNonNull(type);
         Objects.requireNonNull(processor);
-        return this.addConnectionEventProcessor(ConnectionEventTypeProcessor.wrap(type, processor));
+        List<ConnectionEventProcessor> processors = connectionEventProcessorMap.get(type);
+        if (processors == null) {
+            processors = new ArrayList<>();
+            connectionEventProcessorMap.put(type, processors);
+        }
+        processors.add(processor);
+        return this;
     }
 
     /**
@@ -135,7 +145,7 @@ public class BrokerServerBuilder {
      */
     public BrokerServerBuilder addConnectionEventProcessor(ConnectionEventTypeProcessor processor) {
         Objects.requireNonNull(processor);
-        this.connectionEventTypeProcessorList.add(processor);
+        addConnectionEventProcessor(processor.getType(), processor);
         return this;
     }
 
@@ -146,7 +156,7 @@ public class BrokerServerBuilder {
      */
     public BrokerServerBuilder clearProcessors() {
         this.processorList.clear();
-        this.connectionEventTypeProcessorList.clear();
+        this.connectionEventProcessorMap.clear();
         return this;
     }
 

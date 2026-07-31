@@ -76,7 +76,7 @@ public class BrokerClientBuilder {
     /**
      * bolt 连接器
      */
-    private final List<ConnectionEventTypeProcessor> connectionEventTypeProcessorList = new ArrayList<>();
+    private final Map<ConnectionEventType, List<ConnectionEventProcessor>> connectionEventProcessorMap = new HashMap<>();
 
     /**
      * 服务注册表
@@ -184,8 +184,13 @@ public class BrokerClientBuilder {
 
         processorList.forEach(brokerClient::aware);
         processorList.forEach(rpcClient::registerUserProcessor);
-        connectionEventTypeProcessorList.forEach(processor -> brokerClient.aware(processor.getDelegate()));
-        connectionEventTypeProcessorList.forEach(processor -> rpcClient.addConnectionEventProcessor(processor.getType(), processor));
+        for (ConnectionEventType eventType : connectionEventProcessorMap.keySet()) {
+            List<ConnectionEventProcessor> processors = connectionEventProcessorMap.get(eventType);
+            for (ConnectionEventProcessor processor : processors) {
+                brokerClient.aware(processor);
+                rpcClient.addConnectionEventProcessor(eventType, processor);
+            }
+        }
 
         return brokerClient;
     }
@@ -268,7 +273,13 @@ public class BrokerClientBuilder {
     public BrokerClientBuilder addConnectionEventProcessor(ConnectionEventType type, ConnectionEventProcessor processor) {
         Objects.requireNonNull(type);
         Objects.requireNonNull(processor);
-        return this.addConnectionEventProcessor(ConnectionEventTypeProcessor.wrap(type, processor));
+        List<ConnectionEventProcessor> processors = connectionEventProcessorMap.get(type);
+        if (processors == null) {
+            processors = new ArrayList<>();
+            connectionEventProcessorMap.put(type, processors);
+        }
+        processors.add(processor);
+        return this;
     }
 
     /**
@@ -279,7 +290,7 @@ public class BrokerClientBuilder {
      */
     public BrokerClientBuilder addConnectionEventProcessor(ConnectionEventTypeProcessor processor) {
         Objects.requireNonNull(processor);
-        this.connectionEventTypeProcessorList.add(processor);
+        addConnectionEventProcessor(processor.getType(), processor);
         return this;
     }
 
@@ -290,7 +301,7 @@ public class BrokerClientBuilder {
      */
     public BrokerClientBuilder clearProcessors() {
         this.processorList.clear();
-        this.connectionEventTypeProcessorList.clear();
+        this.connectionEventProcessorMap.clear();
         return this;
     }
 

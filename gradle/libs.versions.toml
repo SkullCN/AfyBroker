@@ -4,6 +4,8 @@ bungeecord = "1.19-R0.1-SNAPSHOT"
 spigot = "1.12.2-R0.1-SNAPSHOT"
 bstats = "3.0.2"
 jline3 = "3.21.0"
+junit = "5.9.3"
+mockito = "4.11.0"
 
 
 [plugins]
@@ -35,3 +37,5 @@ bungeecord-proxy = { module = "net.md-5:bungeecord-proxy", version.ref = "bungee
 bstats-bukkit = { module = "org.bstats:bstats-bukkit", version.ref = "bstats" }
 bstats-velocity = { module = "org.bstats:bstats-velocity", version.ref = "bstats" }
 bstats-bungeecord = { module = "org.bstats:bstats-bungeecord", version.ref = "bstats" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }

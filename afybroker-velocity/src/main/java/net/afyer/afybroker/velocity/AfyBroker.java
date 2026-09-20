@@ -9,6 +9,8 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import net.afyer.afybroker.client.Broker;
 import net.afyer.afybroker.client.BrokerClient;
 import net.afyer.afybroker.client.BrokerClientBuilder;
@@ -18,6 +20,8 @@ import net.afyer.afybroker.core.BrokerClientType;
 import net.afyer.afybroker.core.BrokerGlobalConfig;
 import net.afyer.afybroker.core.Bstats;
 import net.afyer.afybroker.core.observability.PlayerObservation;
+import net.afyer.afybroker.core.session.PlayerSessionHandshake;
+import net.afyer.afybroker.core.session.PlayerSessionRegistry;
 import net.afyer.afybroker.core.util.BoltUtils;
 import net.afyer.afybroker.velocity.listener.PlayerListener;
 import net.afyer.afybroker.velocity.processor.*;
@@ -47,6 +51,8 @@ public class AfyBroker {
     private final Logger logger;
     private final Path dataDirectory;
     private final Metrics.Factory metricsFactory;
+    private final MinecraftChannelIdentifier sessionChannel = MinecraftChannelIdentifier.create("afybroker", "session");
+    private final PlayerSessionRegistry<Player> playerSessions = new PlayerSessionRegistry<>();
     private BrokerClient brokerClient;
     private ConfigurationNode config;
     private boolean syncEnable;
@@ -84,8 +90,17 @@ public class AfyBroker {
         return syncEnable;
     }
 
+    public MinecraftChannelIdentifier getSessionChannel() {
+        return sessionChannel;
+    }
+
+    public PlayerSessionRegistry<Player> getPlayerSessions() {
+        return playerSessions;
+    }
+
     @Subscribe(order = PostOrder.LAST)
     public void onProxyInitializeLast(ProxyInitializeEvent event) {
+        server.getChannelRegistrar().register(sessionChannel);
         metrics = metricsFactory.make(this, Bstats.VELOCITY);
         try {
             Path configPath = dataDirectory.resolve("config.yml");
@@ -155,5 +170,6 @@ public class AfyBroker {
         if (metrics != null) {
             metrics.shutdown();
         }
+        server.getChannelRegistrar().unregister(sessionChannel);
     }
 }

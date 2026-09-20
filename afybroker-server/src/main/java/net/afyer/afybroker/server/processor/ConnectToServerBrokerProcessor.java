@@ -4,6 +4,7 @@ import com.alipay.remoting.AsyncContext;
 import com.alipay.remoting.BizContext;
 import com.alipay.remoting.rpc.protocol.AsyncUserProcessor;
 import net.afyer.afybroker.core.message.ConnectToServerMessage;
+import net.afyer.afybroker.core.BrokerClientType;
 import net.afyer.afybroker.server.BrokerServer;
 import net.afyer.afybroker.server.aware.BrokerServerAware;
 import net.afyer.afybroker.server.proxy.BrokerPlayer;
@@ -26,8 +27,12 @@ public class ConnectToServerBrokerProcessor extends AsyncUserProcessor<ConnectTo
 
     @Override
     public void handleRequest(BizContext bizCtx, AsyncContext asyncCtx, ConnectToServerMessage message) throws Exception {
+        net.afyer.afybroker.server.proxy.BrokerClientItem source = brokerServer.getClient(bizCtx);
+        if (source == null || !BrokerClientType.PROXY.equals(source.getType())
+                || message.getUniqueId() == null || message.getSessionId() == null) return;
         BrokerPlayer brokerPlayer = brokerServer.getPlayerManager().getPlayer(message.getUniqueId());
-        if (brokerPlayer == null) return;
+        if (brokerPlayer == null || brokerPlayer.getProxy() != source
+                || !brokerPlayer.getSessionId().equals(message.getSessionId())) return;
 
         brokerPlayer.connectToServer(message.getServerName());
     }

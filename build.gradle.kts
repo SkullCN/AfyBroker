@@ -8,7 +8,7 @@ subprojects {
     apply(plugin = "java")
 
     group = "net.afyer.afybroker"
-    version = "2.12"
+    version = "2.13"
 
     repositories {
         mavenCentral()
@@ -38,7 +38,6 @@ subprojects {
 tasks.withType<Jar> {
     enabled = false
 }
-
 
 
 

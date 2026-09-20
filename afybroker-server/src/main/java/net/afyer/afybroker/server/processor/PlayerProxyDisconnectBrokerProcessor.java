@@ -48,17 +48,25 @@ public class PlayerProxyDisconnectBrokerProcessor extends AsyncUserProcessor<Pla
                     request.getName(), playerBungee.getName());
         }
 
-        handlePlayerRemove(brokerServer, request.getUniqueId());
+        if (request.getUniqueId() == null || request.getSessionId() == null) {
+            return;
+        }
+        BrokerPlayer player = brokerServer.getPlayerManager().getPlayer(request.getUniqueId());
+        if (player == null || player.getProxy() != playerBungee
+                || !player.getSessionId().equals(request.getSessionId())) {
+            return;
+        }
+        handlePlayerRemove(brokerServer, player);
     }
 
-    public static void handlePlayerRemove(BrokerServer brokerServer, UUID uniqueId) {
+    public static boolean handlePlayerRemove(BrokerServer brokerServer, BrokerPlayer expected) {
         BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
-        BrokerPlayer brokerPlayer = playerManager.getPlayer(uniqueId);
-        if (brokerPlayer != null) {
-            brokerServer.getPluginManager().callEvent(new PlayerProxyLogoutEvent(brokerPlayer));
-            playerManager.removePlayer(uniqueId);
-            brokerServer.getObservability().onPlayer(new PlayerObservation(PlayerEventType.LEAVE, playerManager.size()));
+        if (!playerManager.removePlayer(expected)) {
+            return false;
         }
+        brokerServer.getPluginManager().callEvent(new PlayerProxyLogoutEvent(expected));
+        brokerServer.getObservability().onPlayer(new PlayerObservation(PlayerEventType.LEAVE, playerManager.size()));
+        return true;
     }
 
     @Override

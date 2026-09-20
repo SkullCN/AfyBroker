@@ -46,7 +46,9 @@ public class PlayerServerConnectedBrokerProcessor extends AsyncUserProcessor<Pla
         }
 
         BrokerPlayer brokerPlayer = brokerServer.getPlayer(playerUniqueId);
-        if (brokerPlayer == null) {
+        if (brokerPlayer == null || request.getSessionId() == null
+                || !brokerPlayer.getSessionId().equals(request.getSessionId())
+                || brokerPlayer.getProxy() != bungeeClient) {
             return;
         }
 

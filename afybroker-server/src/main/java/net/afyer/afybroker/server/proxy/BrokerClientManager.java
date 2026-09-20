@@ -1,5 +1,6 @@
 package net.afyer.afybroker.server.proxy;
 
+import com.alipay.remoting.Connection;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,21 +23,40 @@ public class BrokerClientManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(BrokerClientManager.class);
 
     private final Map<String, BrokerClientItem> byAddress = new ConcurrentHashMap<>();
+    private final Map<String, Connection> connecting = new ConcurrentHashMap<>();
+
+    public synchronized void beginConnection(String address, Connection connection) {
+        connecting.put(address, connection);
+    }
+
+    public synchronized boolean isConnecting(String address, Connection connection) {
+        return connecting.get(address) == connection;
+    }
 
     /**
      * 注册客户端代理
      */
-    public void register(BrokerClientItem brokerClientItem) {
+    public synchronized boolean register(BrokerClientItem brokerClientItem) {
         String address = brokerClientItem.getAddress();
-
+        Connection connection = brokerClientItem.getConnection();
+        if (connection == null || connecting.get(address) != connection) {
+            return false;
+        }
         byAddress.put(address, brokerClientItem);
+        connecting.remove(address, connection);
+        return true;
     }
 
     /**
      * 移除客户端代理
      */
-    public void remove(String address) {
-        byAddress.remove(address);
+    public synchronized BrokerClientItem remove(String address, Connection connection) {
+        connecting.remove(address, connection);
+        BrokerClientItem current = byAddress.get(address);
+        if (current == null || current.getConnection() != connection) {
+            return null;
+        }
+        return byAddress.remove(address, current) ? current : null;
     }
 
     /**
@@ -45,6 +65,22 @@ public class BrokerClientManager {
     @Nullable
     public BrokerClientItem getByAddress(String address) {
         return byAddress.get(address);
+    }
+
+    public synchronized boolean isCurrent(BrokerClientItem client) {
+        Connection pending = connecting.get(client.getAddress());
+        return byAddress.get(client.getAddress()) == client
+                && (pending == null || pending == client.getConnection());
+    }
+
+    @Nullable
+    public synchronized BrokerClientItem getByConnection(String address, Connection connection) {
+        Connection pending = connecting.get(address);
+        if (pending != null && pending != connection) {
+            return null;
+        }
+        BrokerClientItem client = byAddress.get(address);
+        return client != null && client.getConnection() == connection ? client : null;
     }
 
     /**

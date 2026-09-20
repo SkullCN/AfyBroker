@@ -44,27 +44,52 @@ public class PlayerProxyConnectBrokerProcessor extends SyncUserProcessor<PlayerP
                     request.getName(), playerBungee.getName());
         }
 
-        BrokerPlayer brokerPlayer = new BrokerPlayer(request.getUniqueId(), request.getName(), playerBungee);
-        return handlePlayerAdd(brokerServer, brokerPlayer, request.getServerName());
+        if (request.getUniqueId() == null || request.getSessionId() == null) {
+            return new PlayerProxyConnectResult().setSuccess(false);
+        }
+
+        BrokerPlayer brokerPlayer = new BrokerPlayer(request.getUniqueId(), request.getName(), request.getSessionId(), playerBungee);
+        return handlePlayerLogin(brokerServer, brokerPlayer, request.getServerName());
     }
 
     public static boolean handlePlayerAdd(BrokerServer brokerServer, BrokerPlayer brokerPlayer) {
-        return handlePlayerAdd(brokerServer, brokerPlayer, null).isSuccess();
+        BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
+        BrokerPlayer existing = playerManager.getPlayer(brokerPlayer.getUniqueId());
+        if (existing == null) {
+            existing = playerManager.addPlayer(brokerPlayer);
+            if (existing == null) {
+                notifyPlayerLogin(brokerServer, playerManager, brokerPlayer, null);
+                return true;
+            }
+        }
+        if (!existing.getSessionId().equals(brokerPlayer.getSessionId())) {
+            return false;
+        }
+        if (existing.getProxy() == brokerPlayer.getProxy()) {
+            return true;
+        }
+        BrokerClientItem registeredProxy = brokerServer.getClientManager().getByAddress(existing.getProxy().getAddress());
+        return registeredProxy != existing.getProxy() && playerManager.replaceSession(existing, brokerPlayer);
     }
 
-    private static PlayerProxyConnectResult handlePlayerAdd(BrokerServer brokerServer, BrokerPlayer brokerPlayer, String serverName) {
+    private static PlayerProxyConnectResult handlePlayerLogin(BrokerServer brokerServer, BrokerPlayer brokerPlayer, String serverName) {
         BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
         BrokerPlayer player = playerManager.addPlayer(brokerPlayer);
         boolean success = player == null;
         if (success) {
-            brokerServer.getObservability().onPlayer(new PlayerObservation(PlayerEventType.JOIN, playerManager.size()));
-            PlayerProxyLoginEvent event = new PlayerProxyLoginEvent(brokerPlayer, serverName);
-            brokerServer.getPluginManager().callEvent(event);
-            serverName = event.getServerName();
+            serverName = notifyPlayerLogin(brokerServer, playerManager, brokerPlayer, serverName);
         }
         return new PlayerProxyConnectResult()
                 .setSuccess(success)
                 .setServerName(serverName);
+    }
+
+    private static String notifyPlayerLogin(BrokerServer brokerServer, BrokerPlayerManager playerManager,
+                                            BrokerPlayer brokerPlayer, String serverName) {
+        brokerServer.getObservability().onPlayer(new PlayerObservation(PlayerEventType.JOIN, playerManager.size()));
+        PlayerProxyLoginEvent event = new PlayerProxyLoginEvent(brokerPlayer, serverName);
+        brokerServer.getPluginManager().callEvent(event);
+        return event.getServerName();
     }
 
     @Override

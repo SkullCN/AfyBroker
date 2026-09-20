@@ -11,6 +11,7 @@ import net.afyer.afybroker.core.BrokerGlobalConfig;
 import net.afyer.afybroker.core.BrokerServiceDescriptor;
 import net.afyer.afybroker.core.MetadataKeys;
 import net.afyer.afybroker.core.message.BrokerClientInfoMessage;
+import net.afyer.afybroker.core.message.PlayerSessionInfo;
 import net.afyer.afybroker.core.message.RequestBrokerClientInfoMessage;
 import net.afyer.afybroker.core.message.RequestPlayerInfoMessage;
 import net.afyer.afybroker.core.message.SyncServerMessage;
@@ -22,6 +23,7 @@ import net.afyer.afybroker.server.event.ClientRegisterEvent;
 import net.afyer.afybroker.server.processor.PlayerProxyConnectBrokerProcessor;
 import net.afyer.afybroker.server.processor.PlayerServerJoinBrokerProcessor;
 import net.afyer.afybroker.server.proxy.BrokerClientItem;
+import net.afyer.afybroker.server.proxy.BrokerClientManager;
 import net.afyer.afybroker.server.proxy.BrokerPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,7 +43,7 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
     private BrokerServer brokerServer;
     final RequestBrokerClientInfoMessage requestBrokerClientInfoMessage = new RequestBrokerClientInfoMessage();
     final RequestPlayerInfoMessage requestPlayerInfoMessage = new RequestPlayerInfoMessage();
-    final Map<UUID, String> playerBukkitMap = new HashMap<>();
+    final Map<PlayerSessionInfo, BrokerClientItem> playerBukkitMap = new HashMap<>();
     final Executor connectionThread = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
             .setNameFormat("Broker-connection-thread").build());
 
@@ -52,13 +54,14 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
 
     @Override
     public void onEvent(String remoteAddress, Connection connection) {
+        brokerServer.getClientManager().beginConnection(remoteAddress, connection);
         brokerServer.getObservability().onConnection(ConnectionEventType.CONNECT);
         LOGGER.info("BrokerClient[{}] connected, sending request client info message", remoteAddress);
 
         ClientConnectEvent event = new ClientConnectEvent(remoteAddress, connection);
         brokerServer.getPluginManager().callEvent(event);
 
-        InvokeCallback callback = registerBrokerClientCallback(remoteAddress);
+        InvokeCallback callback = registerBrokerClientCallback(remoteAddress, connection);
         int timeoutMillis = BrokerGlobalConfig.DEFAULT_TIMEOUT_MILLIS;
         try {
             brokerServer.getRpcServer().invokeWithCallback(connection, requestBrokerClientInfoMessage, callback, timeoutMillis);
@@ -68,16 +71,22 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
         }
     }
 
-    private InvokeCallback registerBrokerClientCallback(String remoteAddress) {
+    private InvokeCallback registerBrokerClientCallback(String remoteAddress, Connection connection) {
         return new AbstractInvokeCallback() {
             @Override
             public void onResponse(Object result) {
+                BrokerClientManager clientManager = brokerServer.getClientManager();
+                if (!clientManager.isConnecting(remoteAddress, connection)) {
+                    return;
+                }
                 BrokerClientInfoMessage clientInfoMessage = cast(result);
                 clientInfoMessage.setAddress(remoteAddress);
 
                 BrokerClientItem client = new BrokerClientItem(clientInfoMessage,
-                        brokerServer.getRpcServer(), brokerServer.getInterceptors());
-                brokerServer.getClientManager().register(client);
+                        brokerServer.getRpcServer(), brokerServer.getInterceptors(), connection);
+                if (!clientManager.register(client)) {
+                    return;
+                }
 
                 ClientRegisterEvent event = new ClientRegisterEvent(clientInfoMessage, client);
                 brokerServer.getPluginManager().callEvent(event);
@@ -120,25 +129,29 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
         }
     }
 
-    private InvokeCallback registerPlayerBungeeCallback(BrokerClientItem bungeeClient) {
+    InvokeCallback registerPlayerBungeeCallback(BrokerClientItem bungeeClient) {
         return new AbstractInvokeCallback() {
             @Override
             public void onResponse(Object result) {
-                Map<UUID, String> playerMap = cast(result);
-                playerMap.forEach((uuid, name) -> {
-                    BrokerPlayer brokerPlayer = new BrokerPlayer(uuid, name, bungeeClient);
+                if (!brokerServer.getClientManager().isCurrent(bungeeClient)) {
+                    return;
+                }
+                List<PlayerSessionInfo> playerList = cast(result);
+                playerList.forEach(playerInfo -> {
+                    if (playerInfo == null || playerInfo.getUniqueId() == null || playerInfo.getSessionId() == null) {
+                        return;
+                    }
+                    BrokerPlayer brokerPlayer = new BrokerPlayer(playerInfo.getUniqueId(), playerInfo.getName(),
+                            playerInfo.getSessionId(), bungeeClient);
                     if (!PlayerProxyConnectBrokerProcessor.handlePlayerAdd(brokerServer, brokerPlayer)) {
                         return;
                     }
-                    String bukkitAddress = playerBukkitMap.remove(uuid);
-                    if (bukkitAddress == null) {
+                    playerBukkitMap.keySet().removeIf(previous ->
+                            previous.getUniqueId().equals(playerInfo.getUniqueId()) && !previous.equals(playerInfo));
+                    BrokerClientItem bukkitClient = playerBukkitMap.remove(playerInfo);
+                    if (bukkitClient == null || !brokerServer.getClientManager().isCurrent(bukkitClient)) {
                         return;
                     }
-                    BrokerClientItem bukkitClient = brokerServer.getClientManager().getByAddress(bukkitAddress);
-                    if (bukkitClient == null) {
-                        return;
-                    }
-
                     PlayerServerJoinBrokerProcessor.handleBukkitJoin(brokerServer, brokerPlayer, bukkitClient);
                 });
             }
@@ -156,19 +169,34 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
         };
     }
 
-    private InvokeCallback registerPlayerBukkitCallback(BrokerClientItem bukkitClient) {
+    InvokeCallback registerPlayerBukkitCallback(BrokerClientItem bukkitClient) {
         return new AbstractInvokeCallback() {
             @Override
             public void onResponse(Object result) {
-                List<UUID> playerList = cast(result);
-                playerList.forEach((uuid) -> {
-                    BrokerPlayer brokerPlayer = brokerServer.getPlayer(uuid);
-                    if (brokerPlayer == null) {
-                        playerBukkitMap.put(uuid, bukkitClient.getAddress());
+                if (!brokerServer.getClientManager().isCurrent(bukkitClient)) {
+                    return;
+                }
+                List<PlayerSessionInfo> playerList = cast(result);
+                Set<PlayerSessionInfo> observed = new HashSet<>();
+                playerList.forEach(playerInfo -> {
+                    if (playerInfo == null || playerInfo.getUniqueId() == null || playerInfo.getSessionId() == null) {
                         return;
                     }
+                    observed.add(playerInfo);
+                    BrokerPlayer brokerPlayer = brokerServer.getPlayer(playerInfo.getUniqueId());
+                    if (brokerPlayer == null) {
+                        playerBukkitMap.put(playerInfo, bukkitClient);
+                        return;
+                    }
+                    if (!brokerPlayer.getSessionId().equals(playerInfo.getSessionId())) {
+                        return;
+                    }
+                    playerBukkitMap.keySet().removeIf(previous ->
+                            previous.getUniqueId().equals(playerInfo.getUniqueId()) && !previous.equals(playerInfo));
                     PlayerServerJoinBrokerProcessor.handleBukkitJoin(brokerServer, brokerPlayer, bukkitClient);
                 });
+                playerBukkitMap.entrySet().removeIf(entry ->
+                        entry.getValue() == bukkitClient && !observed.contains(entry.getKey()));
             }
 
             @Override

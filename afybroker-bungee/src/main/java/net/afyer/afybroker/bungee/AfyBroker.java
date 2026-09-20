@@ -15,9 +15,11 @@ import net.afyer.afybroker.core.BrokerClientType;
 import net.afyer.afybroker.core.BrokerGlobalConfig;
 import net.afyer.afybroker.core.Bstats;
 import net.afyer.afybroker.core.observability.PlayerObservation;
+import net.afyer.afybroker.core.session.PlayerSessionRegistry;
 import net.afyer.afybroker.core.util.BoltUtils;
 import net.afyer.afybroker.core.util.LoggerAdapter;
 import net.md_5.bungee.api.ProxyServer;
+import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.config.Configuration;
 import net.md_5.bungee.config.YamlConfiguration;
@@ -38,10 +40,12 @@ public class AfyBroker extends Plugin {
     private Configuration config;
     private boolean syncEnable;
     private Metrics metrics;
+    private final PlayerSessionRegistry<ProxiedPlayer> playerSessions = new PlayerSessionRegistry<>();
     private static final String UNIQUE_ID = PersistentUniqueIdUtils.getOrCreateUniqueId(AfyBroker.class);
 
     @Override
     public void onEnable() {
+        getProxy().registerChannel(net.afyer.afybroker.core.session.PlayerSessionHandshake.CHANNEL);
         metrics = new Metrics(this, Bstats.BUNGEE);
         try {
             config = new BungeeFileConfig("config.yml", this, YamlConfiguration.class).get();
@@ -55,10 +59,10 @@ public class AfyBroker extends Plugin {
                     )
                     .addTags(getConfig().getStringList("tags"))
                     .type(BrokerClientType.PROXY)
-                    .registerUserProcessor(new ConnectToServerBungeeProcessor())
-                    .registerUserProcessor(new KickPlayerBungeeProcessor())
-                    .registerUserProcessor(new PlayerHeartbeatValidateBungeeProcessor())
-                    .registerUserProcessor(new RequestPlayerInfoBungeeProcessor())
+                    .registerUserProcessor(new ConnectToServerBungeeProcessor(this))
+                    .registerUserProcessor(new KickPlayerBungeeProcessor(this))
+                    .registerUserProcessor(new PlayerHeartbeatValidateBungeeProcessor(this))
+                    .registerUserProcessor(new RequestPlayerInfoBungeeProcessor(this))
                     .registerUserProcessor(new SyncServerBungeeProcessor(this))
                     .registerUserProcessor(new PlayerProfilePropertyBungeeProcessor())
                     .registerUserProcessor(new CloseBrokerClientProcessor(getProxy()::stop))
@@ -98,6 +102,7 @@ public class AfyBroker extends Plugin {
         if (metrics != null) {
             metrics.shutdown();
         }
+        getProxy().unregisterChannel(net.afyer.afybroker.core.session.PlayerSessionHandshake.CHANNEL);
     }
 
     public BrokerClient getBrokerClient() {
@@ -110,6 +115,10 @@ public class AfyBroker extends Plugin {
 
     public boolean isSyncEnable() {
         return syncEnable;
+    }
+
+    public PlayerSessionRegistry<ProxiedPlayer> getPlayerSessions() {
+        return playerSessions;
     }
 
     private void registerListeners() {

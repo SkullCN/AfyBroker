@@ -6,6 +6,9 @@ dependencies {
     compileOnly(libs.velocity.api)
     implementation(libs.bstats.velocity)
     implementation(project(":afybroker-client"))
+    testImplementation(libs.velocity.api)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.mockito.core)
 }
 
 tasks.build {

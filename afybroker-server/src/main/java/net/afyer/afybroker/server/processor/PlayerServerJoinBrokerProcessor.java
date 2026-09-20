@@ -36,7 +36,8 @@ public class PlayerServerJoinBrokerProcessor extends AsyncUserProcessor<PlayerSe
         if (!Objects.equals(currentBukkit.getType(), BrokerClientType.SERVER)) return;
 
         BrokerPlayer player = brokerServer.getPlayer(request.getUniqueId());
-        if (player == null) return;
+        if (player == null || request.getSessionId() == null
+                || !player.getSessionId().equals(request.getSessionId())) return;
 
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("Received player bukkit join message => player[{}], bukkitClient[{}]",
@@ -48,6 +49,7 @@ public class PlayerServerJoinBrokerProcessor extends AsyncUserProcessor<PlayerSe
 
     public static void handleBukkitJoin(BrokerServer server, BrokerPlayer player, BrokerClientItem bukkitClient) {
         if (!Objects.equals(bukkitClient.getType(), BrokerClientType.SERVER)) return;
+        if (!server.getPlayerManager().isCurrent(player) || player.getServer() == bukkitClient) return;
 
         BrokerClientItem previousBukkit = player.getServer();
         player.setServer(bukkitClient);

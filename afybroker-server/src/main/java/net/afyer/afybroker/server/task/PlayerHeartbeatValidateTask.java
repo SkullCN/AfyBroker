@@ -1,6 +1,7 @@
 package net.afyer.afybroker.server.task;
 
 import com.alipay.remoting.exception.RemotingException;
+import net.afyer.afybroker.core.message.PlayerSessionInfo;
 import net.afyer.afybroker.core.message.PlayerHeartbeatValidateMessage;
 import net.afyer.afybroker.core.util.AbstractInvokeCallback;
 import net.afyer.afybroker.server.BrokerServer;
@@ -64,24 +65,31 @@ public class PlayerHeartbeatValidateTask extends Thread {
         BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
         Collection<BrokerPlayer> brokerPlayers = playerManager.getPlayers();
         if (brokerPlayers.isEmpty()) return;
-        Map<BrokerClientItem, List<UUID>> map = new IdentityHashMap<>();
+        Map<BrokerClientItem, List<PlayerSessionInfo>> map = new IdentityHashMap<>();
         for (BrokerPlayer player : brokerPlayers) {
             BrokerClientItem bungeeProxy = player.getProxy();
             map.computeIfAbsent(bungeeProxy, k -> new ArrayList<>())
-                    .add(player.getUniqueId());
+                    .add(new PlayerSessionInfo()
+                            .setUniqueId(player.getUniqueId())
+                            .setSessionId(player.getSessionId())
+                            .setName(player.getName()));
         }
-        for (Map.Entry<BrokerClientItem, List<UUID>> entry : map.entrySet()) {
+        for (Map.Entry<BrokerClientItem, List<PlayerSessionInfo>> entry : map.entrySet()) {
             PlayerHeartbeatValidateMessage message = new PlayerHeartbeatValidateMessage()
-                    .setUniqueIdList(entry.getValue());
+                    .setPlayers(entry.getValue());
             BrokerClientItem bungeeProxy = entry.getKey();
             try {
                 bungeeProxy.invokeWithCallback(message, new AbstractInvokeCallback() {
                     @Override
                     public void onResponse(Object result) {
-                        List<UUID> response = cast(result);
+                        List<PlayerSessionInfo> response = cast(result);
                         if (response.isEmpty()) return;
-                        for (UUID uniqueId : response) {
-                            PlayerProxyDisconnectBrokerProcessor.handlePlayerRemove(brokerServer, uniqueId);
+                        for (PlayerSessionInfo session : response) {
+                            BrokerPlayer current = brokerServer.getPlayerManager().getPlayer(session.getUniqueId());
+                            if (current != null && current.getProxy() == bungeeProxy
+                                    && current.getSessionId().equals(session.getSessionId())) {
+                                PlayerProxyDisconnectBrokerProcessor.handlePlayerRemove(brokerServer, current);
+                            }
                         }
                     }
 

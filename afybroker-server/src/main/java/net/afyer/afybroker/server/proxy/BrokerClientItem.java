@@ -1,6 +1,7 @@
 package net.afyer.afybroker.server.proxy;
 
 import com.alipay.remoting.InvokeCallback;
+import com.alipay.remoting.Connection;
 import com.alipay.remoting.exception.RemotingException;
 import com.alipay.remoting.rpc.RpcResponseFuture;
 import com.alipay.remoting.rpc.RpcServer;
@@ -32,6 +33,8 @@ public class BrokerClientItem {
 
     private final RpcServer rpcServer;
 
+    private final Connection connection;
+
     private final List<Interceptor> interceptors;
 
     /**
@@ -40,17 +43,27 @@ public class BrokerClientItem {
     private final int defaultTimeoutMillis = BrokerGlobalConfig.DEFAULT_TIMEOUT_MILLIS;
 
     public BrokerClientItem(BrokerClientInfoMessage clientInfo, RpcServer rpcServer) {
-        this(clientInfo, rpcServer, Collections.emptyList());
+        this(clientInfo, rpcServer, Collections.emptyList(), null);
     }
 
     public BrokerClientItem(BrokerClientInfoMessage clientInfo, RpcServer rpcServer, List<Interceptor> interceptors) {
+        this(clientInfo, rpcServer, interceptors, null);
+    }
+
+    public BrokerClientItem(BrokerClientInfoMessage clientInfo, RpcServer rpcServer,
+                            List<Interceptor> interceptors, Connection connection) {
         this.clientInfo = clientInfo.build();
         this.rpcServer = rpcServer;
         this.interceptors = interceptors == null ? Collections.emptyList() : interceptors;
+        this.connection = connection;
     }
 
     public BrokerClientInfo getClientInfo() {
         return clientInfo;
+    }
+
+    public Connection getConnection() {
+        return connection;
     }
 
     public int getDefaultTimeoutMillis() {

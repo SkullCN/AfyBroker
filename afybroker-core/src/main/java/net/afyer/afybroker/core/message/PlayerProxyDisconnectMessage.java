@@ -17,6 +17,8 @@ public class PlayerProxyDisconnectMessage implements Serializable {
      */
     private UUID uniqueId;
 
+    private UUID sessionId;
+
     /**
      * 玩家名
      */
@@ -35,6 +37,15 @@ public class PlayerProxyDisconnectMessage implements Serializable {
         return name;
     }
 
+    public UUID getSessionId() {
+        return sessionId;
+    }
+
+    public PlayerProxyDisconnectMessage setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+        return this;
+    }
+
     public PlayerProxyDisconnectMessage setName(String name) {
         this.name = name;
         return this;
@@ -44,6 +55,7 @@ public class PlayerProxyDisconnectMessage implements Serializable {
     public String toString() {
         return "PlayerProxyDisconnectMessage{" +
                 "uniqueId=" + uniqueId +
+                ", sessionId=" + sessionId +
                 ", name='" + name + '\'' +
                 '}';
     }

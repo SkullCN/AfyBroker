@@ -7,6 +7,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.afyer.afybroker.core.message.ConnectToServerMessage;
+import net.afyer.afybroker.core.session.PlayerSessionRegistry;
 import net.afyer.afybroker.velocity.AfyBroker;
 
 /**
@@ -28,8 +29,10 @@ public class ConnectToServerVelocityProcessor extends AsyncUserProcessor<Connect
         RegisteredServer target = server.getServer(message.getServerName()).orElse(null);
         if (target == null) return;
 
-        Player player = server.getPlayer(message.getUniqueId()).orElse(null);
-        if (player == null) return;
+        PlayerSessionRegistry.Binding<Player> binding = plugin.getPlayerSessions()
+                .get(message.getUniqueId(), message.getSessionId());
+        if (binding == null || !plugin.getPlayerSessions().isCurrent(binding)) return;
+        Player player = binding.getPlayer();
 
         player.createConnectionRequest(target).connect();
     }

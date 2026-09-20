@@ -1,12 +1,10 @@
 package net.afyer.afybroker.server.command;
 
-import com.alipay.remoting.exception.RemotingException;
 import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
-import net.afyer.afybroker.core.message.KickPlayerMessage;
 import net.afyer.afybroker.server.BrokerServer;
 import net.afyer.afybroker.server.plugin.BrigadierCommand;
 import net.afyer.afybroker.server.proxy.BrokerPlayer;
@@ -67,14 +65,10 @@ public class CommandKick implements BrigadierCommand {
             throw PLAYER_NOT_ONLINE_EXCEPTION.create(playerName);
         }
 
-        KickPlayerMessage kickMessage = new KickPlayerMessage()
-                .setUniqueId(player.getUniqueId())
-                .setMessage(message);
-
         try {
-            player.getProxy().oneway(kickMessage);
+            player.kick(message);
             return 1;
-        } catch (RemotingException | InterruptedException e) {
+        } catch (Exception e) {
             throw KICK_FAILED_EXCEPTION.create(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
     }

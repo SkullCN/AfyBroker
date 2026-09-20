@@ -7,6 +7,10 @@ dependencies {
     compileOnly(libs.bungeecord.proxy)
     implementation(libs.bstats.bungeecord)
     implementation(project(":afybroker-client"))
+    testImplementation(libs.bungeecord.api)
+    testImplementation(libs.bungeecord.proxy)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.mockito.core)
 }
 
 tasks.assemble {

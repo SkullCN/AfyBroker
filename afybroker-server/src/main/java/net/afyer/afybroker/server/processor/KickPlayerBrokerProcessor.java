@@ -4,7 +4,6 @@ import com.alipay.remoting.AsyncContext;
 import com.alipay.remoting.BizContext;
 import com.alipay.remoting.rpc.protocol.AsyncUserProcessor;
 import net.afyer.afybroker.core.message.KickPlayerMessage;
-import net.afyer.afybroker.core.BrokerClientType;
 import net.afyer.afybroker.server.BrokerServer;
 import net.afyer.afybroker.server.aware.BrokerServerAware;
 import net.afyer.afybroker.server.proxy.BrokerPlayer;
@@ -27,13 +26,12 @@ public class KickPlayerBrokerProcessor extends AsyncUserProcessor<KickPlayerMess
 
     @Override
     public void handleRequest(BizContext bizCtx, AsyncContext asyncCtx, KickPlayerMessage request) throws Exception {
-        net.afyer.afybroker.server.proxy.BrokerClientItem source = brokerServer.getClient(bizCtx);
-        if (source == null || !BrokerClientType.PROXY.equals(source.getType())
+        if (brokerServer.getClient(bizCtx) == null
                 || request.getUniqueId() == null || request.getSessionId() == null) {
             return;
         }
         BrokerPlayer player = brokerServer.getPlayer(request.getUniqueId());
-        if (player == null || player.getProxy() != source || !player.getSessionId().equals(request.getSessionId())) return;
+        if (player == null || !player.getSessionId().equals(request.getSessionId())) return;
         player.kick(request.getMessage());
     }
 

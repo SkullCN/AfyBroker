@@ -1,5 +1,7 @@
 package net.afyer.afybroker.core.session;
 
+import net.afyer.afybroker.core.message.PlayerSessionInfo;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -110,6 +112,17 @@ public final class PlayerSessionRegistry<P> {
 
     public synchronized List<Binding<P>> getActiveSessions() {
         return Collections.unmodifiableList(new ArrayList<>(activePlayers.values()));
+    }
+
+    public synchronized List<PlayerSessionInfo> getActiveSessionInfos() {
+        List<PlayerSessionInfo> sessions = new ArrayList<>(activePlayers.size());
+        for (Binding<P> binding : activePlayers.values()) {
+            sessions.add(new PlayerSessionInfo()
+                    .setUniqueId(binding.getUniqueId())
+                    .setSessionId(binding.getSessionId())
+                    .setName(binding.getName()));
+        }
+        return Collections.unmodifiableList(sessions);
     }
 
     public static final class Binding<P> {

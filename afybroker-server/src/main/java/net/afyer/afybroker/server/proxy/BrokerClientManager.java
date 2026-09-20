@@ -68,6 +68,19 @@ public class BrokerClientManager {
     }
 
     public synchronized boolean isCurrent(BrokerClientItem client) {
+        return isCurrentLocked(client);
+    }
+
+    /** Runs a short in-memory update before this client can be replaced or removed. */
+    public synchronized boolean runIfCurrent(BrokerClientItem client, Runnable update) {
+        if (!isCurrentLocked(client)) {
+            return false;
+        }
+        update.run();
+        return true;
+    }
+
+    private boolean isCurrentLocked(BrokerClientItem client) {
         Connection pending = connecting.get(client.getAddress());
         return byAddress.get(client.getAddress()) == client
                 && (pending == null || pending == client.getConnection());

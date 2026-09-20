@@ -41,7 +41,7 @@ public class BrokerPlayer implements Attributable {
      * 玩家所在的 Minecraft 服务器客户端代理
      */
     @Nullable
-    private BrokerClientItem server;
+    private volatile BrokerClientItem server;
 
     public BrokerPlayer(UUID uniqueId, String name, UUID sessionId, BrokerClientItem proxy) {
         this.uniqueId = uniqueId;

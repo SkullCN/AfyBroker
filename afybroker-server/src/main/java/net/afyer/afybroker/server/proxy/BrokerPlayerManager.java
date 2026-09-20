@@ -78,6 +78,15 @@ public class BrokerPlayerManager {
         return byUid.get(expected.getUniqueId()) == expected;
     }
 
+    /** Runs a short in-memory update before this player session can be replaced or removed. */
+    public synchronized boolean runIfCurrent(BrokerPlayer expected, Runnable update) {
+        if (byUid.get(expected.getUniqueId()) != expected) {
+            return false;
+        }
+        update.run();
+        return true;
+    }
+
     @Nullable
     public synchronized BrokerPlayer getPlayer(UUID uid) {
         return byUid.get(uid);

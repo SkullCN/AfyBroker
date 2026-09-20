@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @author Nipuru
@@ -52,36 +53,62 @@ public class PlayerProxyConnectBrokerProcessor extends SyncUserProcessor<PlayerP
         return handlePlayerLogin(brokerServer, brokerPlayer, request.getServerName());
     }
 
-    public static boolean handlePlayerAdd(BrokerServer brokerServer, BrokerPlayer brokerPlayer) {
+    public static SnapshotRegistration registerSnapshotPlayer(BrokerServer brokerServer, BrokerPlayer brokerPlayer) {
         BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
         BrokerPlayer existing = playerManager.getPlayer(brokerPlayer.getUniqueId());
         if (existing == null) {
             existing = playerManager.addPlayer(brokerPlayer);
             if (existing == null) {
-                notifyPlayerLogin(brokerServer, playerManager, brokerPlayer, null);
-                return true;
+                return new SnapshotRegistration(brokerPlayer, true);
             }
         }
         if (!existing.getSessionId().equals(brokerPlayer.getSessionId())) {
-            return false;
+            return null;
         }
         if (existing.getProxy() == brokerPlayer.getProxy()) {
-            return true;
+            return new SnapshotRegistration(existing, false);
         }
-        BrokerClientItem registeredProxy = brokerServer.getClientManager().getByAddress(existing.getProxy().getAddress());
-        return registeredProxy != existing.getProxy() && playerManager.replaceSession(existing, brokerPlayer);
+        if (brokerServer.getClientManager().isCurrent(existing.getProxy())) {
+            return null;
+        }
+        return playerManager.replaceSession(existing, brokerPlayer)
+                ? new SnapshotRegistration(brokerPlayer, false) : null;
+    }
+
+    public static void publishSnapshotLogin(BrokerServer brokerServer, BrokerPlayer brokerPlayer) {
+        notifyPlayerLogin(brokerServer, brokerServer.getPlayerManager(), brokerPlayer, null);
     }
 
     private static PlayerProxyConnectResult handlePlayerLogin(BrokerServer brokerServer, BrokerPlayer brokerPlayer, String serverName) {
         BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
-        BrokerPlayer player = playerManager.addPlayer(brokerPlayer);
-        boolean success = player == null;
+        AtomicBoolean added = new AtomicBoolean();
+        boolean current = brokerServer.getClientManager().runIfCurrent(brokerPlayer.getProxy(),
+                () -> added.set(playerManager.addPlayer(brokerPlayer) == null));
+        boolean success = current && added.get();
         if (success) {
             serverName = notifyPlayerLogin(brokerServer, playerManager, brokerPlayer, serverName);
         }
         return new PlayerProxyConnectResult()
                 .setSuccess(success)
                 .setServerName(serverName);
+    }
+
+    public static final class SnapshotRegistration {
+        private final BrokerPlayer player;
+        private final boolean newLogin;
+
+        private SnapshotRegistration(BrokerPlayer player, boolean newLogin) {
+            this.player = player;
+            this.newLogin = newLogin;
+        }
+
+        public BrokerPlayer getPlayer() {
+            return player;
+        }
+
+        public boolean isNewLogin() {
+            return newLogin;
+        }
     }
 
     private static String notifyPlayerLogin(BrokerServer brokerServer, BrokerPlayerManager playerManager,

@@ -60,6 +60,26 @@ class ConnectEventBrokerProcessorTest {
     }
 
     @Test
+    void proxySnapshotBeforeBackendPairsMatchingSessionAndIgnoresOldBackendSnapshot() {
+        Fixture fixture = new Fixture();
+        BrokerClientItem proxyB = client(fixture.clientManager, BrokerClientType.PROXY, "proxy-b");
+        BrokerClientItem backendB = client(fixture.clientManager, BrokerClientType.SERVER, "backend-b");
+        BrokerClientItem backendA = client(fixture.clientManager, BrokerClientType.SERVER, "backend-a");
+        UUID uniqueId = UUID.randomUUID();
+        UUID sessionA = UUID.randomUUID();
+        UUID sessionB = UUID.randomUUID();
+        ConnectEventBrokerProcessor processor = fixture.processor();
+
+        invoke(processor.registerPlayerBungeeCallback(proxyB), player(uniqueId, sessionB));
+        invoke(processor.registerPlayerBukkitCallback(backendB), player(uniqueId, sessionB));
+        invoke(processor.registerPlayerBukkitCallback(backendA), player(uniqueId, sessionA));
+
+        BrokerPlayer current = fixture.players.getPlayer(uniqueId);
+        assertSame(backendB, current.getServer());
+        assertEquals(1, fixture.players.size());
+    }
+
+    @Test
     void proxyCallbackCannotRegisterPlayerAfterReplacementBegins() {
         Fixture fixture = new Fixture();
         BrokerClientItem oldProxy = client(fixture.clientManager, BrokerClientType.PROXY, "proxy");

@@ -44,7 +44,7 @@ public class PlayerHeartbeatValidateTask extends Thread {
     public void run() {
         while (running.get()) {
             try {
-                validate();
+                validateOnce();
             } catch (Throwable t) {
                 LOGGER.error("PlayerHeartbeatValidateTask encountered an exception", t);
             }
@@ -61,22 +61,26 @@ public class PlayerHeartbeatValidateTask extends Thread {
         }
     }
 
-    private void validate() {
+    void validateOnce() {
         BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
         Collection<BrokerPlayer> brokerPlayers = playerManager.getPlayers();
         if (brokerPlayers.isEmpty()) return;
-        Map<BrokerClientItem, List<PlayerSessionInfo>> map = new IdentityHashMap<>();
+        Map<BrokerClientItem, Map<UUID, BrokerPlayer>> map = new IdentityHashMap<>();
         for (BrokerPlayer player : brokerPlayers) {
             BrokerClientItem bungeeProxy = player.getProxy();
-            map.computeIfAbsent(bungeeProxy, k -> new ArrayList<>())
-                    .add(new PlayerSessionInfo()
-                            .setUniqueId(player.getUniqueId())
-                            .setSessionId(player.getSessionId())
-                            .setName(player.getName()));
+            map.computeIfAbsent(bungeeProxy, k -> new HashMap<>()).put(player.getUniqueId(), player);
         }
-        for (Map.Entry<BrokerClientItem, List<PlayerSessionInfo>> entry : map.entrySet()) {
+        for (Map.Entry<BrokerClientItem, Map<UUID, BrokerPlayer>> entry : map.entrySet()) {
+            Map<UUID, BrokerPlayer> capturedPlayers = entry.getValue();
+            List<PlayerSessionInfo> playerInfos = new ArrayList<>();
+            for (BrokerPlayer player : capturedPlayers.values()) {
+                playerInfos.add(new PlayerSessionInfo()
+                        .setUniqueId(player.getUniqueId())
+                        .setSessionId(player.getSessionId())
+                        .setName(player.getName()));
+            }
             PlayerHeartbeatValidateMessage message = new PlayerHeartbeatValidateMessage()
-                    .setPlayers(entry.getValue());
+                    .setPlayers(playerInfos);
             BrokerClientItem bungeeProxy = entry.getKey();
             try {
                 bungeeProxy.invokeWithCallback(message, new AbstractInvokeCallback() {
@@ -85,10 +89,12 @@ public class PlayerHeartbeatValidateTask extends Thread {
                         List<PlayerSessionInfo> response = cast(result);
                         if (response.isEmpty()) return;
                         for (PlayerSessionInfo session : response) {
-                            BrokerPlayer current = brokerServer.getPlayerManager().getPlayer(session.getUniqueId());
-                            if (current != null && current.getProxy() == bungeeProxy
-                                    && current.getSessionId().equals(session.getSessionId())) {
-                                PlayerProxyDisconnectBrokerProcessor.handlePlayerRemove(brokerServer, current);
+                            if (session == null || session.getUniqueId() == null || session.getSessionId() == null) {
+                                continue;
+                            }
+                            BrokerPlayer captured = capturedPlayers.get(session.getUniqueId());
+                            if (captured != null && captured.getSessionId().equals(session.getSessionId())) {
+                                PlayerProxyDisconnectBrokerProcessor.handlePlayerRemove(brokerServer, captured);
                             }
                         }
                     }

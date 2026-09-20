@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @author Nipuru
@@ -61,7 +62,10 @@ public class PlayerProxyDisconnectBrokerProcessor extends AsyncUserProcessor<Pla
 
     public static boolean handlePlayerRemove(BrokerServer brokerServer, BrokerPlayer expected) {
         BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
-        if (!playerManager.removePlayer(expected)) {
+        AtomicBoolean removed = new AtomicBoolean();
+        boolean current = brokerServer.getClientManager().runIfCurrent(expected.getProxy(),
+                () -> removed.set(playerManager.removePlayer(expected)));
+        if (!current || !removed.get()) {
             return false;
         }
         brokerServer.getPluginManager().callEvent(new PlayerProxyLogoutEvent(expected));

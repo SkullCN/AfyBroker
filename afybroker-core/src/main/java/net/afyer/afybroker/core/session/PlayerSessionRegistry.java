@@ -14,6 +14,7 @@ import java.util.UUID;
 public final class PlayerSessionRegistry<P> {
 
     private final Map<UUID, Binding<P>> activePlayers = new java.util.HashMap<>();
+    private final Map<UUID, Binding<P>> pendingPlayers = new java.util.HashMap<>();
     private final Map<P, Binding<P>> connections = new IdentityHashMap<>();
 
     public synchronized Binding<P> begin(UUID uniqueId, P player) {
@@ -41,12 +42,20 @@ public final class PlayerSessionRegistry<P> {
         }
         Binding<P> binding = new Binding<>(uniqueId, sessionId, name, player);
         connections.put(player, binding);
+        Binding<P> previousPending = pendingPlayers.put(uniqueId, binding);
+        if (previousPending != null && previousPending != activePlayers.get(uniqueId)) {
+            connections.remove(previousPending.player, previousPending);
+            previousPending.registered = false;
+        }
         return binding;
     }
 
     public synchronized boolean bind(Binding<P> binding, UUID sessionId) {
         Objects.requireNonNull(sessionId, "sessionId");
-        if (binding == null || connections.get(binding.player) != binding) {
+        if (binding == null || connections.get(binding.player) != binding
+                || (binding.registered
+                ? activePlayers.get(binding.uniqueId) != binding
+                : pendingPlayers.get(binding.uniqueId) != binding)) {
             return false;
         }
         if (binding.sessionId != null) {
@@ -57,7 +66,8 @@ public final class PlayerSessionRegistry<P> {
     }
 
     public synchronized boolean accept(Binding<P> binding) {
-        if (binding == null || binding.sessionId == null || connections.get(binding.player) != binding) {
+        if (binding == null || binding.sessionId == null || connections.get(binding.player) != binding
+                || pendingPlayers.get(binding.uniqueId) != binding) {
             return false;
         }
         Binding<P> current = activePlayers.get(binding.uniqueId);
@@ -66,6 +76,7 @@ public final class PlayerSessionRegistry<P> {
         }
         binding.registered = true;
         activePlayers.put(binding.uniqueId, binding);
+        pendingPlayers.remove(binding.uniqueId, binding);
         return true;
     }
 
@@ -96,6 +107,9 @@ public final class PlayerSessionRegistry<P> {
             return null;
         }
         connections.remove(player);
+        if (pendingPlayers.get(uniqueId) == binding) {
+            pendingPlayers.remove(uniqueId);
+        }
         if (activePlayers.get(uniqueId) == binding) {
             activePlayers.remove(uniqueId);
         }

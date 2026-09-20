@@ -44,6 +44,40 @@ class PlayerSessionRegistryTest {
     }
 
     @Test
+    void newestPendingConnectionOwnsTheHandshakeResponse() {
+        PlayerSessionRegistry<Object> registry = new PlayerSessionRegistry<>();
+        UUID uniqueId = UUID.randomUUID();
+        PlayerSessionRegistry.Binding<Object> oldPending = registry.beginPending(uniqueId, "player", new Object());
+        Object currentPlayer = new Object();
+        PlayerSessionRegistry.Binding<Object> currentPending = registry.beginPending(uniqueId, "player", currentPlayer);
+
+        assertFalse(registry.bind(oldPending, UUID.randomUUID()));
+        assertFalse(registry.accept(oldPending));
+        UUID sessionId = UUID.randomUUID();
+        assertTrue(registry.bind(currentPending, sessionId));
+        assertTrue(registry.accept(currentPending));
+        assertSame(currentPending, registry.getCurrent(uniqueId));
+        assertSame(currentPending, registry.getConnection(currentPlayer));
+    }
+
+    @Test
+    void rejectedNewConnectionDoesNotDemoteAcceptedPlayer() {
+        PlayerSessionRegistry<Object> registry = new PlayerSessionRegistry<>();
+        UUID uniqueId = UUID.randomUUID();
+        Object acceptedPlayer = new Object();
+        PlayerSessionRegistry.Binding<Object> accepted = registry.begin(uniqueId, "player", acceptedPlayer);
+        assertTrue(registry.accept(accepted));
+
+        Object rejectedPlayer = new Object();
+        PlayerSessionRegistry.Binding<Object> rejected = registry.beginPending(uniqueId, "player", rejectedPlayer);
+        assertSame(accepted, registry.getCurrent(uniqueId));
+        assertTrue(registry.isCurrent(accepted));
+        assertSame(rejected, registry.remove(uniqueId, rejectedPlayer));
+        assertSame(accepted, registry.getCurrent(uniqueId));
+        assertTrue(registry.isCurrent(accepted));
+    }
+
+    @Test
     void sessionHandshakeOnlyAcceptsExactResponseFrames() {
         UUID sessionId = UUID.randomUUID();
 

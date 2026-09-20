@@ -183,11 +183,13 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
                                 previous.getUniqueId().equals(playerInfo.getUniqueId()) && !previous.equals(playerInfo));
                         BrokerClientItem bukkitClient = playerBukkitMap.remove(playerInfo);
                         if (bukkitClient != null) {
-                            PlayerServerJoinEvent joinEvent = PlayerServerJoinBrokerProcessor.updateBukkitJoin(
-                                    brokerServer, registration.getPlayer(), bukkitClient);
-                            if (joinEvent != null) {
-                                joinEvents.add(joinEvent);
-                            }
+                            brokerServer.getClientManager().runIfCurrent(bukkitClient, () -> {
+                                PlayerServerJoinEvent joinEvent = PlayerServerJoinBrokerProcessor.updateBukkitJoin(
+                                        brokerServer, registration.getPlayer(), bukkitClient);
+                                if (joinEvent != null) {
+                                    joinEvents.add(joinEvent);
+                                }
+                            });
                         }
                         if (registration.isNewLogin()) {
                             loginPlayers.add(registration.getPlayer());

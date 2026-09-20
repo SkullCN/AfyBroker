@@ -14,6 +14,7 @@ import net.afyer.afybroker.core.observability.Observability;
 import net.afyer.afybroker.server.BrokerServer;
 import net.afyer.afybroker.server.event.PlayerProxyLoginEvent;
 import net.afyer.afybroker.server.event.PlayerProxyLogoutEvent;
+import net.afyer.afybroker.server.event.PlayerServerJoinEvent;
 import net.afyer.afybroker.server.plugin.Event;
 import net.afyer.afybroker.server.plugin.PluginManager;
 import net.afyer.afybroker.server.processor.PlayerProxyConnectBrokerProcessor;
@@ -90,6 +91,27 @@ class ConnectEventBrokerProcessorTest {
         BrokerPlayer current = fixture.players.getPlayer(uniqueId);
         assertSame(backendB, current.getServer());
         assertEquals(1, fixture.players.size());
+    }
+
+    @Test
+    void proxySnapshotDoesNotPairBackendWhoseRpcConnectionWasReplaced() {
+        Fixture fixture = new Fixture();
+        BrokerClientItem backend = client(fixture.clientManager, BrokerClientType.SERVER, "backend");
+        BrokerClientItem proxy = client(fixture.clientManager, BrokerClientType.PROXY, "proxy");
+        UUID uniqueId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        ConnectEventBrokerProcessor processor = fixture.processor();
+
+        invoke(processor.registerPlayerBukkitCallback(backend), player(uniqueId, sessionId));
+        assertEquals(1, processor.playerBukkitMap.size());
+        fixture.clientManager.beginConnection(backend.getAddress(), mock(Connection.class));
+        invoke(processor.registerPlayerBungeeCallback(proxy), player(uniqueId, sessionId));
+
+        BrokerPlayer current = fixture.players.getPlayer(uniqueId);
+        assertSame(proxy, current.getProxy());
+        assertNull(current.getServer());
+        assertTrue(processor.playerBukkitMap.isEmpty());
+        verify(fixture.pluginManager, never()).callEvent(any(PlayerServerJoinEvent.class));
     }
 
     @Test

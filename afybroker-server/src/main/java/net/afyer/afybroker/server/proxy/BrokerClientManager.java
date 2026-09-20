@@ -1,6 +1,7 @@
 package net.afyer.afybroker.server.proxy;
 
 import com.alipay.remoting.Connection;
+import net.afyer.afybroker.core.BrokerClientType;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,14 +38,60 @@ public class BrokerClientManager {
      * 注册客户端代理
      */
     public synchronized boolean register(BrokerClientItem brokerClientItem) {
+        return registerReplacingLogicalClient(brokerClientItem).isRegistered();
+    }
+
+    /** Registers a client and removes older connections for the same logical Proxy identity. */
+    public synchronized RegistrationResult registerReplacingLogicalClient(BrokerClientItem brokerClientItem) {
         String address = brokerClientItem.getAddress();
         Connection connection = brokerClientItem.getConnection();
         if (connection == null || connecting.get(address) != connection) {
-            return false;
+            return RegistrationResult.rejected();
+        }
+
+        List<BrokerClientItem> replaced = new ArrayList<>();
+        if (Objects.equals(brokerClientItem.getType(), BrokerClientType.PROXY)) {
+            for (Map.Entry<String, BrokerClientItem> entry : byAddress.entrySet()) {
+                BrokerClientItem previous = entry.getValue();
+                if (previous != brokerClientItem
+                        && Objects.equals(previous.getType(), brokerClientItem.getType())
+                        && previous.getName() != null
+                        && brokerClientItem.getName() != null
+                        && previous.getName().equalsIgnoreCase(brokerClientItem.getName())
+                        && byAddress.remove(entry.getKey(), previous)) {
+                    replaced.add(previous);
+                }
+            }
         }
         byAddress.put(address, brokerClientItem);
         connecting.remove(address, connection);
-        return true;
+        return RegistrationResult.registered(replaced);
+    }
+
+    public static final class RegistrationResult {
+        private final boolean registered;
+        private final List<BrokerClientItem> replacedClients;
+
+        private RegistrationResult(boolean registered, List<BrokerClientItem> replacedClients) {
+            this.registered = registered;
+            this.replacedClients = replacedClients;
+        }
+
+        private static RegistrationResult rejected() {
+            return new RegistrationResult(false, java.util.Collections.emptyList());
+        }
+
+        private static RegistrationResult registered(List<BrokerClientItem> replacedClients) {
+            return new RegistrationResult(true, replacedClients);
+        }
+
+        public boolean isRegistered() {
+            return registered;
+        }
+
+        public List<BrokerClientItem> getReplacedClients() {
+            return replacedClients;
+        }
     }
 
     /**

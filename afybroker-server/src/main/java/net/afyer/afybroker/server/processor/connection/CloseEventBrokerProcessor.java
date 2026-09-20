@@ -32,13 +32,16 @@ public class CloseEventBrokerProcessor implements ConnectionEventProcessor, Brok
         BrokerClientItem client = clientManager.remove(remoteAddress, connection);
 
         if (client != null) {
-            // 清理服务注册
-            brokerServer.getServiceRegistry().unregisterClientServices(client);
-            ClientCloseEvent event = new ClientCloseEvent(remoteAddress, client.getName(), client.getTags(), client.getType());
-            brokerServer.getPluginManager().callEvent(event);
+            cleanupClient(brokerServer, remoteAddress, client);
         }
 
         brokerServer.getObservability().onConnection(ConnectionEventType.CLOSE);
         LOGGER.info("BrokerClient[{}] disconnect", remoteAddress);
+    }
+
+    static void cleanupClient(BrokerServer brokerServer, String remoteAddress, BrokerClientItem client) {
+        brokerServer.getServiceRegistry().unregisterClientServices(client);
+        ClientCloseEvent event = new ClientCloseEvent(remoteAddress, client.getName(), client.getTags(), client.getType());
+        brokerServer.getPluginManager().callEvent(event);
     }
 }

@@ -21,6 +21,7 @@ import net.afyer.afybroker.server.aware.BrokerServerAware;
 import net.afyer.afybroker.server.event.ClientConnectEvent;
 import net.afyer.afybroker.server.event.ClientRegisterEvent;
 import net.afyer.afybroker.server.processor.PlayerProxyConnectBrokerProcessor;
+import net.afyer.afybroker.server.processor.PlayerProxyDisconnectBrokerProcessor;
 import net.afyer.afybroker.server.processor.PlayerServerJoinBrokerProcessor;
 import net.afyer.afybroker.server.event.PlayerServerJoinEvent;
 import net.afyer.afybroker.server.proxy.BrokerClientItem;
@@ -85,8 +86,12 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
 
                 BrokerClientItem client = new BrokerClientItem(clientInfoMessage,
                         brokerServer.getRpcServer(), brokerServer.getInterceptors(), connection);
-                if (!clientManager.register(client)) {
+                BrokerClientManager.RegistrationResult registration = clientManager.registerReplacingLogicalClient(client);
+                if (!registration.isRegistered()) {
                     return;
+                }
+                for (BrokerClientItem replaced : registration.getReplacedClients()) {
+                    CloseEventBrokerProcessor.cleanupClient(brokerServer, replaced.getAddress(), replaced);
                 }
 
                 ClientRegisterEvent event = new ClientRegisterEvent(clientInfoMessage, client);
@@ -135,38 +140,72 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
             @Override
             public void onResponse(Object result) {
                 List<PlayerSessionInfo> playerList = cast(result);
-                playerList.forEach(playerInfo -> {
-                    if (playerInfo == null || playerInfo.getUniqueId() == null || playerInfo.getSessionId() == null) {
-                        return;
+                Map<UUID, UUID> observedSessions = new HashMap<>();
+                for (PlayerSessionInfo playerInfo : playerList) {
+                    if (isSessionInfo(playerInfo)) {
+                        observedSessions.put(playerInfo.getUniqueId(), playerInfo.getSessionId());
                     }
-                    PlayerProxyConnectBrokerProcessor.SnapshotRegistration[] registration = new PlayerProxyConnectBrokerProcessor.SnapshotRegistration[1];
-                    PlayerServerJoinEvent[] joinEvent = new PlayerServerJoinEvent[1];
-                    boolean current = brokerServer.getClientManager().runIfCurrent(bungeeClient, () -> {
+                }
+                List<BrokerPlayer> removedPlayers = new ArrayList<>();
+                List<BrokerPlayer> loginPlayers = new ArrayList<>();
+                List<PlayerServerJoinEvent> joinEvents = new ArrayList<>();
+                boolean current = brokerServer.getClientManager().runIfCurrent(bungeeClient, () -> {
+                    for (BrokerPlayer existing : new ArrayList<>(brokerServer.getPlayerManager().getPlayers())) {
+                        BrokerClientItem previousProxy = existing.getProxy();
+                        if (previousProxy == bungeeClient
+                                || !Objects.equals(previousProxy.getType(), BrokerClientType.PROXY)
+                                || previousProxy.getName() == null
+                                || !previousProxy.getName().equalsIgnoreCase(bungeeClient.getName())
+                                || brokerServer.getClientManager().isCurrent(previousProxy)
+                                || existing.getSessionId().equals(observedSessions.get(existing.getUniqueId()))) {
+                            continue;
+                        }
+                        if (brokerServer.getPlayerManager().removePlayer(existing)) {
+                            removedPlayers.add(existing);
+                            playerBukkitMap.keySet().removeIf(previous ->
+                                    previous.getUniqueId().equals(existing.getUniqueId())
+                                            && previous.getSessionId().equals(existing.getSessionId()));
+                        }
+                    }
+
+                    for (PlayerSessionInfo playerInfo : playerList) {
+                        if (!isSessionInfo(playerInfo)) {
+                            continue;
+                        }
                         BrokerPlayer brokerPlayer = new BrokerPlayer(playerInfo.getUniqueId(), playerInfo.getName(),
                                 playerInfo.getSessionId(), bungeeClient);
-                        registration[0] = PlayerProxyConnectBrokerProcessor.registerSnapshotPlayer(brokerServer, brokerPlayer);
-                        if (registration[0] == null) {
-                            return;
+                        PlayerProxyConnectBrokerProcessor.SnapshotRegistration registration =
+                                PlayerProxyConnectBrokerProcessor.registerSnapshotPlayer(brokerServer, brokerPlayer);
+                        if (registration == null) {
+                            continue;
                         }
                         playerBukkitMap.keySet().removeIf(previous ->
                                 previous.getUniqueId().equals(playerInfo.getUniqueId()) && !previous.equals(playerInfo));
                         BrokerClientItem bukkitClient = playerBukkitMap.remove(playerInfo);
                         if (bukkitClient != null) {
-                            brokerServer.getClientManager().runIfCurrent(bukkitClient,
-                                    () -> joinEvent[0] = PlayerServerJoinBrokerProcessor.updateBukkitJoin(
-                                            brokerServer, registration[0].getPlayer(), bukkitClient));
+                            PlayerServerJoinEvent joinEvent = PlayerServerJoinBrokerProcessor.updateBukkitJoin(
+                                    brokerServer, registration.getPlayer(), bukkitClient);
+                            if (joinEvent != null) {
+                                joinEvents.add(joinEvent);
+                            }
                         }
-                    });
-                    if (!current || registration[0] == null) {
-                        return;
-                    }
-                    if (registration[0].isNewLogin()) {
-                        PlayerProxyConnectBrokerProcessor.publishSnapshotLogin(brokerServer, registration[0].getPlayer());
-                    }
-                    if (joinEvent[0] != null) {
-                        brokerServer.getPluginManager().callEvent(joinEvent[0]);
+                        if (registration.isNewLogin()) {
+                            loginPlayers.add(registration.getPlayer());
+                        }
                     }
                 });
+                if (!current) {
+                    return;
+                }
+                for (BrokerPlayer removed : removedPlayers) {
+                    PlayerProxyDisconnectBrokerProcessor.publishPlayerLogout(brokerServer, removed);
+                }
+                for (BrokerPlayer player : loginPlayers) {
+                    PlayerProxyConnectBrokerProcessor.publishSnapshotLogin(brokerServer, player);
+                }
+                for (PlayerServerJoinEvent event : joinEvents) {
+                    brokerServer.getPluginManager().callEvent(event);
+                }
             }
 
             @Override
@@ -180,6 +219,10 @@ public class ConnectEventBrokerProcessor implements ConnectionEventProcessor, Br
                 return connectionThread;
             }
         };
+    }
+
+    private static boolean isSessionInfo(PlayerSessionInfo playerInfo) {
+        return playerInfo != null && playerInfo.getUniqueId() != null && playerInfo.getSessionId() != null;
     }
 
     InvokeCallback registerPlayerBukkitCallback(BrokerClientItem bukkitClient) {

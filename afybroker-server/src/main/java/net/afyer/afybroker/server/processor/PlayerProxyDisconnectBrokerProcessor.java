@@ -68,9 +68,14 @@ public class PlayerProxyDisconnectBrokerProcessor extends AsyncUserProcessor<Pla
         if (!current || !removed.get()) {
             return false;
         }
+        publishPlayerLogout(brokerServer, expected);
+        return true;
+    }
+
+    public static void publishPlayerLogout(BrokerServer brokerServer, BrokerPlayer expected) {
+        BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
         brokerServer.getPluginManager().callEvent(new PlayerProxyLogoutEvent(expected));
         brokerServer.getObservability().onPlayer(new PlayerObservation(PlayerEventType.LEAVE, playerManager.size()));
-        return true;
     }
 
     @Override

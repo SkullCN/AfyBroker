@@ -44,7 +44,12 @@ public class PlayerServerJoinBrokerProcessor extends AsyncUserProcessor<PlayerSe
                     request.getName(), currentBukkit.getName());
         }
 
-        handleBukkitJoin(brokerServer, player, currentBukkit);
+        PlayerServerJoinEvent[] event = new PlayerServerJoinEvent[1];
+        boolean current = brokerServer.getClientManager().runIfCurrent(currentBukkit,
+                () -> event[0] = updateBukkitJoin(brokerServer, player, currentBukkit));
+        if (current && event[0] != null) {
+            brokerServer.getPluginManager().callEvent(event[0]);
+        }
     }
 
     public static void handleBukkitJoin(BrokerServer server, BrokerPlayer player, BrokerClientItem bukkitClient) {

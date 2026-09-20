@@ -5,6 +5,7 @@ import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
+import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.ServerConnection;
@@ -15,6 +16,7 @@ import net.afyer.afybroker.client.BrokerClient;
 import net.afyer.afybroker.core.message.PlayerProxyConnectMessage;
 import net.afyer.afybroker.core.message.PlayerProxyConnectResult;
 import net.afyer.afybroker.core.message.PlayerProxyDisconnectMessage;
+import net.afyer.afybroker.core.message.PlayerServerConnectedMessage;
 import net.afyer.afybroker.core.session.PlayerSessionHandshake;
 import net.afyer.afybroker.core.session.PlayerSessionRegistry;
 import net.afyer.afybroker.core.observability.Observability;
@@ -118,6 +120,32 @@ class PlayerListenerTest {
         assertSame(fixture.playerB, bindingB.getPlayer());
         assertNotEquals(bindingA.getSessionId(), bindingB.getSessionId());
         assertTrue(fixture.sessions.isCurrent(bindingB));
+    }
+
+    @Test
+    void serverSwitchOnSamePlayerPublishesConnectedWithCurrentSession() throws Exception {
+        Fixture fixture = new Fixture();
+        when(fixture.brokerClient.invokeSync(any())).thenReturn(new PlayerProxyConnectResult()
+                .setSuccess(true).setServerName("lobby"));
+        EventTask login = fixture.listener.onConnect(fixture.connectEvent);
+        login.execute(mock(Continuation.class));
+        PlayerSessionRegistry.Binding<Player> binding = fixture.sessions.getCurrent(fixture.uniqueId);
+        assertNotNull(binding);
+
+        RegisteredServer game = mock(RegisteredServer.class);
+        com.velocitypowered.api.proxy.server.ServerInfo gameInfo = new com.velocitypowered.api.proxy.server.ServerInfo(
+                "game", new java.net.InetSocketAddress("localhost", 25565));
+        when(game.getServerInfo()).thenReturn(gameInfo);
+        fixture.listener.onServerConnected(new ServerConnectedEvent(fixture.player, game, fixture.lobby));
+
+        ArgumentCaptor<PlayerServerConnectedMessage> message =
+                ArgumentCaptor.forClass(PlayerServerConnectedMessage.class);
+        verify(fixture.brokerClient).oneway(message.capture());
+        assertEquals(fixture.uniqueId, message.getValue().getUniqueId());
+        assertEquals("player-a", message.getValue().getName());
+        assertEquals("game", message.getValue().getServerName());
+        assertEquals(binding.getSessionId(), message.getValue().getSessionId());
+        assertSame(binding, fixture.sessions.getCurrent(fixture.uniqueId));
     }
 
     @Test

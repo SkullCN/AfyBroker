@@ -26,8 +26,11 @@ public class ConnectToServerBrokerProcessor extends AsyncUserProcessor<ConnectTo
 
     @Override
     public void handleRequest(BizContext bizCtx, AsyncContext asyncCtx, ConnectToServerMessage message) throws Exception {
+        if (brokerServer.getClient(bizCtx) == null
+                || message.getUniqueId() == null || message.getSessionId() == null) return;
         BrokerPlayer brokerPlayer = brokerServer.getPlayerManager().getPlayer(message.getUniqueId());
-        if (brokerPlayer == null) return;
+        if (brokerPlayer == null
+                || !brokerPlayer.getSessionId().equals(message.getSessionId())) return;
 
         brokerPlayer.connectToServer(message.getServerName());
     }

@@ -56,6 +56,10 @@ broker:
   name: 'bukkit-%unique_id%'
 ```
 
+## Version compatibility
+
+Starting with 2.13, player connection messages require a login session ID. Upgrade Broker Server and all Bukkit, BungeeCord, and Velocity plugins together to the same version; mixed versions cannot reliably associate player connections, disconnects, routing, and heartbeats. Custom integrations must also pass the session ID; player messages without one are no longer supported.
+
 ## 📖Development
 
 You can refer to these demo projects using this framework to quickly get started

@@ -1,6 +1,7 @@
 package net.afyer.afybroker.server.task;
 
 import com.alipay.remoting.exception.RemotingException;
+import net.afyer.afybroker.core.message.PlayerSessionInfo;
 import net.afyer.afybroker.core.message.PlayerHeartbeatValidateMessage;
 import net.afyer.afybroker.core.util.AbstractInvokeCallback;
 import net.afyer.afybroker.server.BrokerServer;
@@ -43,7 +44,7 @@ public class PlayerHeartbeatValidateTask extends Thread {
     public void run() {
         while (running.get()) {
             try {
-                validate();
+                validateOnce();
             } catch (Throwable t) {
                 LOGGER.error("PlayerHeartbeatValidateTask encountered an exception", t);
             }
@@ -60,28 +61,41 @@ public class PlayerHeartbeatValidateTask extends Thread {
         }
     }
 
-    private void validate() {
+    void validateOnce() {
         BrokerPlayerManager playerManager = brokerServer.getPlayerManager();
         Collection<BrokerPlayer> brokerPlayers = playerManager.getPlayers();
         if (brokerPlayers.isEmpty()) return;
-        Map<BrokerClientItem, List<UUID>> map = new IdentityHashMap<>();
+        Map<BrokerClientItem, Map<UUID, BrokerPlayer>> map = new IdentityHashMap<>();
         for (BrokerPlayer player : brokerPlayers) {
             BrokerClientItem bungeeProxy = player.getProxy();
-            map.computeIfAbsent(bungeeProxy, k -> new ArrayList<>())
-                    .add(player.getUniqueId());
+            map.computeIfAbsent(bungeeProxy, k -> new HashMap<>()).put(player.getUniqueId(), player);
         }
-        for (Map.Entry<BrokerClientItem, List<UUID>> entry : map.entrySet()) {
+        for (Map.Entry<BrokerClientItem, Map<UUID, BrokerPlayer>> entry : map.entrySet()) {
+            Map<UUID, BrokerPlayer> capturedPlayers = entry.getValue();
+            List<PlayerSessionInfo> playerInfos = new ArrayList<>();
+            for (BrokerPlayer player : capturedPlayers.values()) {
+                playerInfos.add(new PlayerSessionInfo()
+                        .setUniqueId(player.getUniqueId())
+                        .setSessionId(player.getSessionId())
+                        .setName(player.getName()));
+            }
             PlayerHeartbeatValidateMessage message = new PlayerHeartbeatValidateMessage()
-                    .setUniqueIdList(entry.getValue());
+                    .setPlayers(playerInfos);
             BrokerClientItem bungeeProxy = entry.getKey();
             try {
                 bungeeProxy.invokeWithCallback(message, new AbstractInvokeCallback() {
                     @Override
                     public void onResponse(Object result) {
-                        List<UUID> response = cast(result);
+                        List<PlayerSessionInfo> response = cast(result);
                         if (response.isEmpty()) return;
-                        for (UUID uniqueId : response) {
-                            PlayerProxyDisconnectBrokerProcessor.handlePlayerRemove(brokerServer, uniqueId);
+                        for (PlayerSessionInfo session : response) {
+                            if (session == null || session.getUniqueId() == null || session.getSessionId() == null) {
+                                continue;
+                            }
+                            BrokerPlayer captured = capturedPlayers.get(session.getUniqueId());
+                            if (captured != null && captured.getSessionId().equals(session.getSessionId())) {
+                                PlayerProxyDisconnectBrokerProcessor.handlePlayerRemove(brokerServer, captured);
+                            }
                         }
                     }
 

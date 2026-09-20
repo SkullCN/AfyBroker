@@ -26,10 +26,12 @@ public class KickPlayerBrokerProcessor extends AsyncUserProcessor<KickPlayerMess
 
     @Override
     public void handleRequest(BizContext bizCtx, AsyncContext asyncCtx, KickPlayerMessage request) throws Exception {
-        BrokerPlayer player = brokerServer.getPlayer(request.getUniqueId());
-        if (player == null) {
+        if (brokerServer.getClient(bizCtx) == null
+                || request.getUniqueId() == null || request.getSessionId() == null) {
             return;
         }
+        BrokerPlayer player = brokerServer.getPlayer(request.getUniqueId());
+        if (player == null || !player.getSessionId().equals(request.getSessionId())) return;
         player.kick(request.getMessage());
     }
 

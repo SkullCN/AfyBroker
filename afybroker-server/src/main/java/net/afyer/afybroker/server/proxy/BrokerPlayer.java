@@ -21,6 +21,9 @@ public class BrokerPlayer implements Attributable {
      * 玩家UUID
      */
     private final UUID uniqueId;
+
+    /** Proxy login connection identity */
+    private final UUID sessionId;
     /**
      * 玩家名字
      */
@@ -38,11 +41,12 @@ public class BrokerPlayer implements Attributable {
      * 玩家所在的 Minecraft 服务器客户端代理
      */
     @Nullable
-    private BrokerClientItem server;
+    private volatile BrokerClientItem server;
 
-    public BrokerPlayer(UUID uniqueId, String name, BrokerClientItem proxy) {
+    public BrokerPlayer(UUID uniqueId, String name, UUID sessionId, BrokerClientItem proxy) {
         this.uniqueId = uniqueId;
         this.name = name;
+        this.sessionId = Objects.requireNonNull(sessionId, "sessionId");
         this.proxy = proxy;
     }
 
@@ -52,6 +56,10 @@ public class BrokerPlayer implements Attributable {
 
     public String getName() {
         return name;
+    }
+
+    public UUID getSessionId() {
+        return sessionId;
     }
 
     public BrokerClientItem getProxy() {
@@ -70,6 +78,7 @@ public class BrokerPlayer implements Attributable {
     public void kick(String message) throws Exception {
         KickPlayerMessage request = new KickPlayerMessage()
                 .setUniqueId(uniqueId)
+                .setSessionId(sessionId)
                 .setMessage(message);
 
         proxy.oneway(request);
@@ -78,6 +87,7 @@ public class BrokerPlayer implements Attributable {
     public void connectToServer(String serverName) throws Exception {
         ConnectToServerMessage request = new ConnectToServerMessage()
                 .setUniqueId(uniqueId)
+                .setSessionId(sessionId)
                 .setServerName(serverName);
 
         proxy.oneway(request);
@@ -105,6 +115,7 @@ public class BrokerPlayer implements Attributable {
     public String toString() {
         return "BrokerPlayer{" +
                 ", uid=" + uniqueId +
+                ", sessionId=" + sessionId +
                 ", name='" + name + '\'' +
                 ", bungeeProxy='" + proxy + '\'' +
                 ", bukkitServer='" + proxy + '\'' +

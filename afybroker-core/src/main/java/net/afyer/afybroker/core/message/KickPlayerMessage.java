@@ -17,6 +17,8 @@ public class KickPlayerMessage implements Serializable {
      */
     private UUID uniqueId;
 
+    private UUID sessionId;
+
     /**
      * 踢出消息
      */
@@ -35,6 +37,15 @@ public class KickPlayerMessage implements Serializable {
         return message;
     }
 
+    public UUID getSessionId() {
+        return sessionId;
+    }
+
+    public KickPlayerMessage setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+        return this;
+    }
+
     public KickPlayerMessage setMessage(String message) {
         this.message = message;
         return this;
@@ -44,6 +55,7 @@ public class KickPlayerMessage implements Serializable {
     public String toString() {
         return "KickPlayerMessage{" +
                 "uniqueId=" + uniqueId +
+                ", sessionId=" + sessionId +
                 ", message='" + message + '\'' +
                 '}';
     }

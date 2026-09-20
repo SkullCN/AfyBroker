@@ -19,6 +19,8 @@ dependencies {
     api(libs.log4j.core)
     api(libs.log4j.slf4j.impl)
     runtimeOnly(libs.jline.terminal.jansi)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.mockito.core)
 }
 
 java {

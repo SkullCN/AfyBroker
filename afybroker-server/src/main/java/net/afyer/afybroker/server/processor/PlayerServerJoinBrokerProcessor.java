@@ -36,22 +36,42 @@ public class PlayerServerJoinBrokerProcessor extends AsyncUserProcessor<PlayerSe
         if (!Objects.equals(currentBukkit.getType(), BrokerClientType.SERVER)) return;
 
         BrokerPlayer player = brokerServer.getPlayer(request.getUniqueId());
-        if (player == null) return;
+        if (player == null || request.getSessionId() == null
+                || !player.getSessionId().equals(request.getSessionId())) return;
 
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("Received player bukkit join message => player[{}], bukkitClient[{}]",
                     request.getName(), currentBukkit.getName());
         }
 
-        handleBukkitJoin(brokerServer, player, currentBukkit);
+        PlayerServerJoinEvent[] event = new PlayerServerJoinEvent[1];
+        boolean current = brokerServer.getClientManager().runIfCurrent(currentBukkit,
+                () -> event[0] = updateBukkitJoin(brokerServer, player, currentBukkit));
+        if (current && event[0] != null) {
+            brokerServer.getPluginManager().callEvent(event[0]);
+        }
     }
 
     public static void handleBukkitJoin(BrokerServer server, BrokerPlayer player, BrokerClientItem bukkitClient) {
-        if (!Objects.equals(bukkitClient.getType(), BrokerClientType.SERVER)) return;
+        PlayerServerJoinEvent event = updateBukkitJoin(server, player, bukkitClient);
+        if (event != null) {
+            server.getPluginManager().callEvent(event);
+        }
+    }
 
-        BrokerClientItem previousBukkit = player.getServer();
-        player.setServer(bukkitClient);
-        server.getPluginManager().callEvent(new PlayerServerJoinEvent(player, previousBukkit, bukkitClient));
+    public static PlayerServerJoinEvent updateBukkitJoin(BrokerServer server, BrokerPlayer player,
+                                                          BrokerClientItem bukkitClient) {
+        if (!Objects.equals(bukkitClient.getType(), BrokerClientType.SERVER)) return null;
+        BrokerClientItem[] previous = new BrokerClientItem[1];
+        boolean[] changed = new boolean[1];
+        boolean current = server.getPlayerManager().runIfCurrent(player, () -> {
+            if (player.getServer() != bukkitClient) {
+                previous[0] = player.getServer();
+                player.setServer(bukkitClient);
+                changed[0] = true;
+            }
+        });
+        return current && changed[0] ? new PlayerServerJoinEvent(player, previous[0], bukkitClient) : null;
     }
 
     @Override

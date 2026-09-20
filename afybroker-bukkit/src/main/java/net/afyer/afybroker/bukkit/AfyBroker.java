@@ -18,11 +18,14 @@ import net.afyer.afybroker.core.BrokerGlobalConfig;
 import net.afyer.afybroker.core.Bstats;
 import net.afyer.afybroker.core.MetadataKeys;
 import net.afyer.afybroker.core.observability.PlayerObservation;
+import net.afyer.afybroker.core.session.PlayerSessionHandshake;
+import net.afyer.afybroker.core.session.PlayerSessionRegistry;
 import net.afyer.afybroker.core.util.BoltUtils;
 import net.afyer.afybroker.core.util.LoggerAdapter;
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Objects;
@@ -38,6 +41,7 @@ import static net.afyer.afybroker.core.BrokerGlobalConfig.ENV_HOSTNAME;
 public class AfyBroker extends JavaPlugin {
     private BrokerClient brokerClient;
     private Metrics metrics;
+    private final PlayerSessionRegistry<Player> playerSessions = new PlayerSessionRegistry<>();
     private static final String UNIQUE_ID = PersistentUniqueIdUtils.getOrCreateUniqueId(AfyBroker.class);
 
     @Override
@@ -60,7 +64,7 @@ public class AfyBroker extends JavaPlugin {
                     .registerUserProcessor(new SendPlayerChatBukkitProcessor())
                     .registerUserProcessor(new BroadcastChatBukkitProcessor())
                     .registerUserProcessor(new SendPlayerTitleBukkitProcessor())
-                    .registerUserProcessor(new RequestPlayerInfoBukkitProcessor())
+                    .registerUserProcessor(new RequestPlayerInfoBukkitProcessor(this))
                     .registerUserProcessor(new CloseBrokerClientProcessor(Bukkit::shutdown))
                     .registerInterceptor(new BukkitServerThreadInterceptor(
                             getConfig().getBoolean("server.thread-check", true)));
@@ -91,6 +95,8 @@ public class AfyBroker extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        getServer().getMessenger().unregisterIncomingPluginChannel(this);
+        getServer().getMessenger().unregisterOutgoingPluginChannel(this);
         if (brokerClient != null) {
             brokerClient.shutdown();
         }
@@ -104,8 +110,18 @@ public class AfyBroker extends JavaPlugin {
         return brokerClient;
     }
 
+    public PlayerSessionRegistry<Player> getPlayerSessions() {
+        return playerSessions;
+    }
+
     private void registerListeners() {
-        getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
+        PlayerListener listener = new PlayerListener(this);
+        getServer().getPluginManager().registerEvents(listener, this);
+        getServer().getMessenger().registerOutgoingPluginChannel(this, PlayerSessionHandshake.CHANNEL);
+        getServer().getMessenger().registerIncomingPluginChannel(this, PlayerSessionHandshake.CHANNEL, listener);
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            listener.startHandshake(player);
+        }
     }
 
     private static String getDefaultServerIp() {

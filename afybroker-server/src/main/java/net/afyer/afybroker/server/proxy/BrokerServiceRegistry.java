@@ -28,14 +28,17 @@ public class BrokerServiceRegistry {
     /**
      * 客户端名称 -> 服务列表
      */
-    private final Map<String, Set<String>> clientServices = new ConcurrentHashMap<>();
+    private final Map<String, ServiceRegistration> clientServices = new ConcurrentHashMap<>();
 
     /**
      * 注册客户端服务
      */
-    public void registerClientServices(BrokerClientItem client, List<BrokerServiceDescriptor> services) {
-        // 先清理该客户端之前注册的服务
-        unregisterClientServices(client);
+    public synchronized void registerClientServices(BrokerClientItem client, List<BrokerServiceDescriptor> services) {
+        // Replace registrations with the same logical name, but retain exact ownership for late close callbacks.
+        ServiceRegistration previous = clientServices.remove(client.getName());
+        if (previous != null) {
+            removeProviders(previous);
+        }
 
         Set<String> registeredServices = new HashSet<>();
 
@@ -55,26 +58,33 @@ public class BrokerServiceRegistry {
             LOGGER.info("Service registered: {} -> {} with tags: {}", serviceInterface, client.getName(), service.getTags());
         }
 
-        clientServices.put(client.getName(), registeredServices);
+        clientServices.put(client.getName(), new ServiceRegistration(client, registeredServices));
     }
 
     /**
      * 取消注册客户端服务
      */
-    public void unregisterClientServices(BrokerClientItem client) {
-        Set<String> services = clientServices.remove(client.getName());
-        if (services != null) {
-            for (String serviceInterface : services) {
-                List<ServiceProvider> providers = serviceProviders.get(serviceInterface);
-                if (providers != null) {
-                    providers.removeIf(provider -> provider.client.getName().equals(client.getName()));
-                    if (providers.isEmpty()) {
-                        serviceProviders.remove(serviceInterface);
-                    }
+    public synchronized void unregisterClientServices(BrokerClientItem client) {
+        ServiceRegistration registration = clientServices.get(client.getName());
+        if (registration == null || registration.client != client
+                || !clientServices.remove(client.getName(), registration)) {
+            return;
+        }
+        removeProviders(registration);
+    }
+
+    private void removeProviders(ServiceRegistration registration) {
+        for (String serviceInterface : registration.services) {
+            List<ServiceProvider> providers = serviceProviders.get(serviceInterface);
+            if (providers != null) {
+                providers.removeIf(provider -> provider.client == registration.client);
+                if (providers.isEmpty()) {
+                    serviceProviders.remove(serviceInterface);
                 }
             }
-            LOGGER.info("Unregistered {} services for client: {}", services.size(), client.getName());
         }
+        LOGGER.info("Unregistered {} services for client: {}", registration.services.size(),
+                registration.client.getName());
     }
 
     /**
@@ -148,4 +158,14 @@ public class BrokerServiceRegistry {
             return tags;
         }
     }
-} 
+
+    private static class ServiceRegistration {
+        private final BrokerClientItem client;
+        private final Set<String> services;
+
+        private ServiceRegistration(BrokerClientItem client, Set<String> services) {
+            this.client = client;
+            this.services = services;
+        }
+    }
+}

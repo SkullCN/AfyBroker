@@ -20,16 +20,16 @@ public class BrokerPlayerManager {
     private final Map<String, BrokerPlayer> byName = new ConcurrentHashMap<>();
     private final Map<UUID, BrokerPlayer> view = Collections.unmodifiableMap(byUid);
 
-    public Collection<BrokerPlayer> getPlayers() {
+    public synchronized Collection<BrokerPlayer> getPlayers() {
         return view.values();
     }
 
-    public int size() {
+    public synchronized int size() {
         return byUid.size();
     }
 
     @Nullable
-    public BrokerPlayer addPlayer(BrokerPlayer player) {
+    public synchronized BrokerPlayer addPlayer(BrokerPlayer player) {
         UUID uid = player.getUniqueId();
         BrokerPlayer absent = byUid.putIfAbsent(uid, player);
         if (absent == null) {
@@ -38,20 +38,62 @@ public class BrokerPlayerManager {
         return absent;
     }
 
-    public void removePlayer(UUID uid) {
+    public synchronized void removePlayer(UUID uid) {
         BrokerPlayer player = byUid.remove(uid);
         if (player != null) {
-            byName.remove(player.getName());
+            if (byName.get(player.getName()) == player) {
+                byName.remove(player.getName());
+            }
         }
     }
 
+    public synchronized boolean removePlayer(BrokerPlayer expected) {
+        UUID uniqueId = expected.getUniqueId();
+        if (byUid.get(uniqueId) != expected) {
+            return false;
+        }
+        byUid.remove(uniqueId);
+        if (byName.get(expected.getName()) == expected) {
+            byName.remove(expected.getName());
+        }
+        return true;
+    }
+
+    public synchronized boolean replaceSession(BrokerPlayer expected, BrokerPlayer replacement) {
+        UUID uniqueId = expected.getUniqueId();
+        if (byUid.get(uniqueId) != expected
+                || !expected.getSessionId().equals(replacement.getSessionId())) {
+            return false;
+        }
+        replacement.setServer(expected.getServer());
+        byUid.put(uniqueId, replacement);
+        if (byName.get(expected.getName()) == expected) {
+            byName.remove(expected.getName());
+        }
+        byName.put(replacement.getName(), replacement);
+        return true;
+    }
+
+    public synchronized boolean isCurrent(BrokerPlayer expected) {
+        return byUid.get(expected.getUniqueId()) == expected;
+    }
+
+    /** Runs a short in-memory update before this player session can be replaced or removed. */
+    public synchronized boolean runIfCurrent(BrokerPlayer expected, Runnable update) {
+        if (byUid.get(expected.getUniqueId()) != expected) {
+            return false;
+        }
+        update.run();
+        return true;
+    }
+
     @Nullable
-    public BrokerPlayer getPlayer(UUID uid) {
+    public synchronized BrokerPlayer getPlayer(UUID uid) {
         return byUid.get(uid);
     }
 
     @Nullable
-    public BrokerPlayer getPlayer(String name) {
+    public synchronized BrokerPlayer getPlayer(String name) {
         return byName.get(name);
     }
 }

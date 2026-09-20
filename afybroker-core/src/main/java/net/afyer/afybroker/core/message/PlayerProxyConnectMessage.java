@@ -18,6 +18,8 @@ public class PlayerProxyConnectMessage implements Serializable {
      */
     private UUID uniqueId;
 
+    private UUID sessionId;
+
     /**
      * 玩家名
      */
@@ -41,6 +43,15 @@ public class PlayerProxyConnectMessage implements Serializable {
         return name;
     }
 
+    public UUID getSessionId() {
+        return sessionId;
+    }
+
+    public PlayerProxyConnectMessage setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+        return this;
+    }
+
     public PlayerProxyConnectMessage setName(String name) {
         this.name = name;
         return this;
@@ -59,6 +70,7 @@ public class PlayerProxyConnectMessage implements Serializable {
     public String toString() {
         return "PlayerProxyConnectMessage{" +
                 "uniqueId=" + uniqueId +
+                ", sessionId=" + sessionId +
                 ", name='" + name + '\'' +
                 ", serverName='" + serverName + '\'' +
                 '}';

@@ -210,7 +210,7 @@ public class BrokerServer implements Attributable {
 
     @Nullable
     public BrokerClientItem getClient(BizContext bizContext) {
-        return clientManager.getByAddress(bizContext.getRemoteAddress());
+        return clientManager.getByConnection(bizContext.getRemoteAddress(), bizContext.getConnection());
     }
 
     public void startup() {

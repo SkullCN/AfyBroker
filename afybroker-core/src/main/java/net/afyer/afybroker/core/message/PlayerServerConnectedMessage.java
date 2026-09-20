@@ -17,6 +17,8 @@ public class PlayerServerConnectedMessage implements Serializable {
      */
     private UUID uniqueId;
 
+    private UUID sessionId;
+
     /**
      * 玩家名
      */
@@ -40,6 +42,15 @@ public class PlayerServerConnectedMessage implements Serializable {
         return name;
     }
 
+    public UUID getSessionId() {
+        return sessionId;
+    }
+
+    public PlayerServerConnectedMessage setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+        return this;
+    }
+
     public PlayerServerConnectedMessage setName(String name) {
         this.name = name;
         return this;
@@ -58,6 +69,7 @@ public class PlayerServerConnectedMessage implements Serializable {
     public String toString() {
         return "PlayerServerConnectedMessage{" +
                 "uniqueId=" + uniqueId +
+                ", sessionId=" + sessionId +
                 ", name='" + name + '\'' +
                 ", serverName='" + serverName + '\'' +
                 '}';

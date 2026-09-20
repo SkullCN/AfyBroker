@@ -4,6 +4,10 @@ plugins {
 
 dependencies {
     compileOnly(libs.spigot.api)
+    testImplementation(libs.spigot.api)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.slf4j.api)
     implementation(libs.bstats.bukkit)
     implementation(project(":afybroker-client"))
     implementation("org.bstats:bstats-bukkit:3.0.2")

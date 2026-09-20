@@ -2,7 +2,6 @@ package net.afyer.afybroker.core.message;
 
 import java.io.Serializable;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * 玩家心跳验证
@@ -16,21 +15,21 @@ public class PlayerHeartbeatValidateMessage implements Serializable {
     /**
      * 需要验证的玩家集合
      */
-    private List<UUID> uniqueIdList;
+    private List<PlayerSessionInfo> players;
 
-    public List<UUID> getUniqueIdList() {
-        return uniqueIdList;
+    public List<PlayerSessionInfo> getPlayers() {
+        return players;
     }
 
-    public PlayerHeartbeatValidateMessage setUniqueIdList(List<UUID> uniqueIdList) {
-        this.uniqueIdList = uniqueIdList;
+    public PlayerHeartbeatValidateMessage setPlayers(List<PlayerSessionInfo> players) {
+        this.players = players;
         return this;
     }
 
     @Override
     public String toString() {
         return "PlayerHeartbeatValidateMessage{" +
-                "uniqueIdList=" + uniqueIdList +
+                "players=" + players +
                 '}';
     }
 }

@@ -17,6 +17,8 @@ public class ConnectToServerMessage implements Serializable {
      */
     private UUID uniqueId;
 
+    private UUID sessionId;
+
     /**
      * minecraft 服务器名（在 proxy 中的名字）
      */
@@ -35,6 +37,15 @@ public class ConnectToServerMessage implements Serializable {
         return serverName;
     }
 
+    public UUID getSessionId() {
+        return sessionId;
+    }
+
+    public ConnectToServerMessage setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+        return this;
+    }
+
     public ConnectToServerMessage setServerName(String serverName) {
         this.serverName = serverName;
         return this;
@@ -44,6 +55,7 @@ public class ConnectToServerMessage implements Serializable {
     public String toString() {
         return "ConnectToServerMessage{" +
                 "uniqueId=" + uniqueId +
+                ", sessionId=" + sessionId +
                 ", serverName='" + serverName + '\'' +
                 '}';
     }

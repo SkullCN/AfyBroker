@@ -13,6 +13,8 @@ dependencies {
     compileOnlyApi(libs.slf4j.api)
     compileOnly(libs.guava)
     compileOnly(libs.netty)
+
+    testImplementation(libs.junit.jupiter)
 }
 
 java {

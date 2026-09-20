@@ -76,7 +76,10 @@ class PlayerListenerTest {
         assertEquals("player", join.getName());
 
         fixture.listener.onPluginMessageReceived(PlayerSessionHandshake.CHANNEL, fixture.player,
-                PlayerSessionHandshake.response(UUID.randomUUID()));
+                PlayerSessionHandshake.response(sessionId));
+        fixture.listener.onPluginMessageReceived(PlayerSessionHandshake.CHANNEL, fixture.player,
+                PlayerSessionHandshake.response(sessionId));
+        fixture.runMain();
         fixture.runMain();
         assertTrue(fixture.mainTasks.isEmpty());
         verify(fixture.brokerClient, times(1)).oneway(any());
@@ -101,7 +104,7 @@ class PlayerListenerTest {
 
         fixture.listener.onQuit(new PlayerQuitEvent(playerA, ""));
         timeoutA.run();
-        verify(playerA, never()).kickPlayer(anyString());
+        verify(playerA, never()).kickPlayer(any());
         assertSame(pendingB, fixture.sessions.getConnection(playerB));
 
         fixture.listener.onPluginMessageReceived(PlayerSessionHandshake.CHANNEL, playerB,
@@ -146,11 +149,27 @@ class PlayerListenerTest {
         sendA.run();
         fixture.runMain();
 
-        verify(playerA, never()).kickPlayer(anyString());
-        verify(playerB, never()).kickPlayer(anyString());
+        verify(playerA, never()).kickPlayer(any());
+        verify(playerB, never()).kickPlayer(any());
         assertSame(playerB, fixture.sessions.getCurrent(fixture.uniqueId).getPlayer());
         fixture.runAsync();
         verify(fixture.brokerClient, times(2)).oneway(any());
+    }
+
+    @Test
+    void currentPendingPlayerIsKickedAfterFiniteHandshakeRetries() {
+        Fixture fixture = new Fixture();
+        fixture.listener.startHandshake(fixture.player);
+        Runnable retry = fixture.timer(0);
+
+        for (int i = 0; i < 41; i++) {
+            retry.run();
+        }
+
+        assertNull(fixture.sessions.getCurrent(fixture.uniqueId));
+        verify(fixture.player, times(40)).sendPluginMessage(eq(fixture.plugin),
+                eq(PlayerSessionHandshake.CHANNEL), eq(PlayerSessionHandshake.request()));
+        verify(fixture.player).kickPlayer("Unable to verify player session");
     }
 
     private static final class Fixture {
